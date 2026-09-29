@@ -1,0 +1,308 @@
+{
+ "note": "Acquisition parameters of a 4-TI x 3-plane undersampled 3D IR-FSE protocol (Hyperfine, 64 mT). Sampling coordinates only; no k-space data or images.",
+ "scanner_axes": "X = S/I, Y = L/R, Z = A/P (mm); geometry string maps (read, pe1, pe2) to scanner axes",
+ "n_coils": 8,
+ "noise_sd_over_TI800_kspace_rms": 0.18,
+ "scans": [
+  {
+   "matrix": [
+    100,
+    122,
+    40
+   ],
+   "fov_mm": [
+    180.0,
+    220.0,
+    200.0
+   ],
+   "geometry": "YZX",
+   "TI_s": 0.03075,
+   "TR_s": 1.225,
+   "TE_s": 0.00531,
+   "echo_spacing_s": 0.00531,
+   "etl_duration_s": 0.1699,
+   "n_read": 100,
+   "n_pe": 992,
+   "n_echo_groups": 2,
+   "undersampling_header": 5.0,
+   "plane": "AX",
+   "name": "AX_TI31",
+   "coord_file": "AX_TI31_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    112,
+    100,
+    44
+   ],
+   "fov_mm": [
+    200.0,
+    180.0,
+    220.0
+   ],
+   "geometry": "XYZ",
+   "TI_s": 0.03075,
+   "TR_s": 1.225,
+   "TE_s": 0.00562,
+   "echo_spacing_s": 0.00562,
+   "etl_duration_s": 0.1798,
+   "n_read": 112,
+   "n_pe": 736,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "COR",
+   "name": "COR_TI31",
+   "coord_file": "COR_TI31_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    122,
+    112,
+    36
+   ],
+   "fov_mm": [
+    220.0,
+    200.0,
+    180.0
+   ],
+   "geometry": "ZXY",
+   "TI_s": 0.03075,
+   "TR_s": 1.225,
+   "TE_s": 0.00566,
+   "echo_spacing_s": 0.00566,
+   "etl_duration_s": 0.1811,
+   "n_read": 122,
+   "n_pe": 672,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "SAG",
+   "name": "SAG_TI31",
+   "coord_file": "SAG_TI31_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    100,
+    122,
+    40
+   ],
+   "fov_mm": [
+    180.0,
+    220.0,
+    200.0
+   ],
+   "geometry": "YZX",
+   "TI_s": 0.15,
+   "TR_s": 1.35,
+   "TE_s": 0.00531,
+   "echo_spacing_s": 0.00531,
+   "etl_duration_s": 0.1699,
+   "n_read": 100,
+   "n_pe": 800,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "AX",
+   "name": "AX_TI150",
+   "coord_file": "AX_TI150_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    112,
+    100,
+    44
+   ],
+   "fov_mm": [
+    200.0,
+    180.0,
+    220.0
+   ],
+   "geometry": "XYZ",
+   "TI_s": 0.15,
+   "TR_s": 1.35,
+   "TE_s": 0.00562,
+   "echo_spacing_s": 0.00562,
+   "etl_duration_s": 0.1798,
+   "n_read": 112,
+   "n_pe": 736,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "COR",
+   "name": "COR_TI150",
+   "coord_file": "COR_TI150_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    122,
+    112,
+    36
+   ],
+   "fov_mm": [
+    220.0,
+    200.0,
+    180.0
+   ],
+   "geometry": "ZXY",
+   "TI_s": 0.15,
+   "TR_s": 1.35,
+   "TE_s": 0.00566,
+   "echo_spacing_s": 0.00566,
+   "etl_duration_s": 0.1811,
+   "n_read": 122,
+   "n_pe": 672,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "SAG",
+   "name": "SAG_TI150",
+   "coord_file": "SAG_TI150_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    100,
+    122,
+    40
+   ],
+   "fov_mm": [
+    180.0,
+    220.0,
+    200.0
+   ],
+   "geometry": "YZX",
+   "TI_s": 0.4,
+   "TR_s": 1.6,
+   "TE_s": 0.00531,
+   "echo_spacing_s": 0.00531,
+   "etl_duration_s": 0.1699,
+   "n_read": 100,
+   "n_pe": 800,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "AX",
+   "name": "AX_TI400",
+   "coord_file": "AX_TI400_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    112,
+    100,
+    44
+   ],
+   "fov_mm": [
+    200.0,
+    180.0,
+    220.0
+   ],
+   "geometry": "XYZ",
+   "TI_s": 0.4,
+   "TR_s": 1.6,
+   "TE_s": 0.00562,
+   "echo_spacing_s": 0.00562,
+   "etl_duration_s": 0.1798,
+   "n_read": 112,
+   "n_pe": 736,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "COR",
+   "name": "COR_TI400",
+   "coord_file": "COR_TI400_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    122,
+    112,
+    36
+   ],
+   "fov_mm": [
+    220.0,
+    200.0,
+    180.0
+   ],
+   "geometry": "ZXY",
+   "TI_s": 0.4,
+   "TR_s": 1.6,
+   "TE_s": 0.00566,
+   "echo_spacing_s": 0.00566,
+   "etl_duration_s": 0.1811,
+   "n_read": 122,
+   "n_pe": 672,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "SAG",
+   "name": "SAG_TI400",
+   "coord_file": "SAG_TI400_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    100,
+    122,
+    40
+   ],
+   "fov_mm": [
+    180.0,
+    220.0,
+    200.0
+   ],
+   "geometry": "YZX",
+   "TI_s": 0.8,
+   "TR_s": 2.0,
+   "TE_s": 0.00531,
+   "echo_spacing_s": 0.00531,
+   "etl_duration_s": 0.1699,
+   "n_read": 100,
+   "n_pe": 800,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "AX",
+   "name": "AX_TI800",
+   "coord_file": "AX_TI800_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    112,
+    100,
+    44
+   ],
+   "fov_mm": [
+    200.0,
+    180.0,
+    220.0
+   ],
+   "geometry": "XYZ",
+   "TI_s": 0.8,
+   "TR_s": 2.0,
+   "TE_s": 0.00562,
+   "echo_spacing_s": 0.00562,
+   "etl_duration_s": 0.1798,
+   "n_read": 112,
+   "n_pe": 736,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "COR",
+   "name": "COR_TI800",
+   "coord_file": "COR_TI800_kspace_coordinate_pe.npy"
+  },
+  {
+   "matrix": [
+    122,
+    112,
+    36
+   ],
+   "fov_mm": [
+    220.0,
+    200.0,
+    180.0
+   ],
+   "geometry": "ZXY",
+   "TI_s": 0.8,
+   "TR_s": 2.0,
+   "TE_s": 0.00566,
+   "echo_spacing_s": 0.00566,
+   "etl_duration_s": 0.1811,
+   "n_read": 122,
+   "n_pe": 672,
+   "n_echo_groups": 2,
+   "undersampling_header": 6.0,
+   "plane": "SAG",
+   "name": "SAG_TI800",
+   "coord_file": "SAG_TI800_kspace_coordinate_pe.npy"
+  }
+ ]
+}

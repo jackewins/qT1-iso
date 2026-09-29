@@ -1,0 +1,16 @@
+# raw and derived data live outside the repo (../AGLOW_*, ../qT1iso_proc); guard anyway
+*.h5
+*.cfl
+*.hdr
+*.ra
+*.npz
+*.npy
+*.nii
+*.nii.gz
+*.mat
+.DS_Store
+.ipynb_checkpoints/
+__pycache__/
+
+# acquisition parameters (sampling coordinates only) are needed by the phantom
+!synth/acq_spec/*.npy
