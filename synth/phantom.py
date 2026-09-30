@@ -31,7 +31,12 @@ smooth phase on the second echo group (FSE even/odd echoes).
 Noise: complex Gaussian, SD = ``NOISE_RATIO`` x RMS of that plane's TI800 k-space (0.18,
 measured on the real data from repeated phase-encode samples).
 
-Usage:  python phantom.py <out_dir> [--factor 2 2 4] [--seed 0] [--noise 0.18]
+Usage:  python phantom.py <out_dir> [--factor 2 2 4] [--seed 0] [--noise 0.18] [--motion]
+
+``--motion`` applies known rigid head motion per scan (``MOTION_PRESET``: drifts within each
+plane, a 2 mm step before axial TI800, and larger offsets between planes). The poses are
+saved in ``phantom_config.json``; each plane's truth is at its TI800 pose, ``truth_iso.npz``
+is the unmoved head. Without the flag the head is static.
 Requires BART (BART_TOOLBOX_PATH set, or /usr/local/bart, with its python/ wrapper).
 """
 import argparse
@@ -78,6 +83,48 @@ STRUCTS = [(3, (-10, 5, 10), (6, 22, 10), 15), (3, (10, 5, 10), (6, 22, 10), -15
 # Lesions: (label, centre (LR, AP, SI), diameter mm)
 LESIONS = [(6, (-30, 20, 35), 10), (6, (-30, -15, 35), 6), (6, (-36, 35, 15), 4), (6, (-36, -40, 15), 2),
            (7, (30, 20, 35), 10), (7, (30, -15, 35), 6), (7, (36, 35, 15), 4), (7, (36, -40, 15), 2)]
+
+
+# Known rigid head motion per scan (object pose in the scanner frame), used only with
+# --motion. rot_deg = rotations about scanner X (S/I), Y (L/R), Z (A/P); trans_mm = shift
+# along X, Y, Z. Within each plane: small drifts and, for the axial plane, a 2 mm step before
+# TI800 (as measured on the real data); between planes: larger offsets. Coils stay fixed to
+# the scanner (the head moves inside the coil), as do the background and echo phases.
+MOTION_PRESET = {
+    'AX_TI31':   dict(rot_deg=(0.3, 0.0, 0.2),  trans_mm=(0.4, -0.3, 0.2)),
+    'AX_TI150':  dict(rot_deg=(0.5, -0.2, 0.3), trans_mm=(0.6, -0.5, 0.4)),
+    'AX_TI400':  dict(rot_deg=(0.7, -0.3, 0.4), trans_mm=(0.8, -0.6, 0.5)),
+    'AX_TI800':  dict(rot_deg=(0.5, -0.6, 1.2), trans_mm=(2.0, 0.8, -1.4)),
+    'COR_TI31':  dict(rot_deg=(1.5, 0.4, -0.5), trans_mm=(-1.8, 1.9, 1.0)),
+    'COR_TI150': dict(rot_deg=(1.6, 0.4, -0.6), trans_mm=(-1.9, 2.1, 1.1)),
+    'COR_TI400': dict(rot_deg=(1.6, 0.5, -0.6), trans_mm=(-2.0, 2.2, 1.2)),
+    'COR_TI800': dict(rot_deg=(1.7, 0.5, -0.7), trans_mm=(-2.1, 2.3, 1.2)),
+    'SAG_TI31':  dict(rot_deg=(-1.0, 1.8, 0.6), trans_mm=(1.2, -2.4, -2.8)),
+    'SAG_TI150': dict(rot_deg=(-1.1, 2.0, 0.6), trans_mm=(1.3, -2.6, -3.0)),
+    'SAG_TI400': dict(rot_deg=(-1.2, 2.1, 0.7), trans_mm=(1.4, -2.7, -3.1)),
+    'SAG_TI800': dict(rot_deg=(-1.3, 2.2, 0.7), trans_mm=(1.5, -2.8, -3.2)),
+}
+
+
+def rigid_matrix(rot_deg, trans_mm):
+    """4x4 object-to-scanner transform: p_scanner = R p_object + t, R = Rz Ry Rx
+    (rotations about scanner X = S/I, Y = L/R, Z = A/P)."""
+    ax, ay, az = np.deg2rad(rot_deg)
+    Rx = np.array([[1, 0, 0], [0, np.cos(ax), -np.sin(ax)], [0, np.sin(ax), np.cos(ax)]])
+    Ry = np.array([[np.cos(ay), 0, np.sin(ay)], [0, 1, 0], [-np.sin(ay), 0, np.cos(ay)]])
+    Rz = np.array([[np.cos(az), -np.sin(az), 0], [np.sin(az), np.cos(az), 0], [0, 0, 1]])
+    M = np.eye(4); M[:3, :3] = Rz @ Ry @ Rx; M[:3, 3] = trans_mm
+    return M
+
+
+def to_object(X, Y, Z, M):
+    """Scanner-frame coordinates -> object-frame coordinates of a head posed by M."""
+    if M is None:
+        return X, Y, Z
+    Ri = M[:3, :3].T; t = M[:3, 3]
+    P = np.stack([X - t[0], Y - t[1], Z - t[2]], 0).reshape(3, -1)
+    Q = (Ri @ P).reshape((3,) + X.shape)
+    return Q[0].astype(np.float32), Q[1].astype(np.float32), Q[2].astype(np.float32)
 
 
 def load_spec():
@@ -177,7 +224,8 @@ def block_mean(a, factor):
 
 
 def simulate(out_dir, factor=FACTOR, seed=0, noise_ratio=NOISE_RATIO,
-             ti_phase_sd_deg=TI_PHASE_SD_DEG, verbose=True):
+             ti_phase_sd_deg=TI_PHASE_SD_DEG, motion=None, verbose=True):
+    """motion: None (static head) or {scan name: dict(rot_deg, trans_mm)}, e.g. MOTION_PRESET."""
     out = Path(out_dir); (out / 'CFL').mkdir(parents=True, exist_ok=True)
     spec = load_spec()
     rng = np.random.default_rng(seed + 100)
@@ -188,7 +236,9 @@ def simulate(out_dir, factor=FACTOR, seed=0, noise_ratio=NOISE_RATIO,
         scans.sort(key=lambda s: s['TI_s'])
         s0 = scans[0]
         X, Y, Z = grid_coords(s0['matrix'], s0['fov_mm'], s0['geometry'], factor)
-        lab, T1, M0, les = tissue_maps(X, Y, Z, seed)
+        pose = {s['name']: (rigid_matrix(**motion[s['name']]) if motion else None) for s in scans}
+        ref_name = [s['name'] for s in scans if s['name'].endswith('TI800')][0]
+        lab, T1, M0, les = tissue_maps(*to_object(X, Y, Z, pose[ref_name]), seed)
         S = coil_maps(X, Y, Z, spec['n_coils'])
         bg = background_phase(X, Y, Z)
         # odd-echo extra phase: linear along this plane's readout axis
@@ -197,7 +247,11 @@ def simulate(out_dir, factor=FACTOR, seed=0, noise_ratio=NOISE_RATIO,
         ksp, ideal = {}, []
         for s in scans:
             dphi = np.deg2rad(rng.normal(0, ti_phase_sd_deg))
-            sig = ir_signal(M0, T1, s['TI_s'], s['TR_s']).astype(np.float32)
+            if motion:                      # this scan's own head pose
+                _, T1s, M0s, _ = tissue_maps(*to_object(X, Y, Z, pose[s['name']]), seed)
+            else:
+                T1s, M0s = T1, M0
+            sig = ir_signal(M0s, T1s, s['TI_s'], s['TR_s']).astype(np.float32)
             coord = np.load(HERE / 'acq_spec' / s['coord_file'])
             D, Tr = [], []
             for e in range(s['n_echo_groups']):
@@ -225,7 +279,7 @@ def simulate(out_dir, factor=FACTOR, seed=0, noise_ratio=NOISE_RATIO,
             json.dump(info, open(f'{stem}_info.json', 'w'), indent=2)
         # ground truth on the reconstruction grid of this plane
         Xc, Yc, Zc = grid_coords(s0['matrix'], s0['fov_mm'], s0['geometry'])
-        labc, T1c, M0c, lesc = tissue_maps(Xc, Yc, Zc, seed)
+        labc, T1c, M0c, lesc = tissue_maps(*to_object(Xc, Yc, Zc, pose[ref_name]), seed)
         S_ideal = np.stack(ideal, -1)                                   # (X, Y, Z, TI)
         TIa = np.array([s['TI_s'] for s in scans]); TRa = np.array([s['TR_s'] for s in scans])
         T1_ideal, _, _ = fit_t1_grid(S_ideal, TIa, TRa, labc >= 3)
@@ -235,7 +289,9 @@ def simulate(out_dir, factor=FACTOR, seed=0, noise_ratio=NOISE_RATIO,
                             lesion_frac_by_id=np.stack([block_mean((les == i + 1).astype(np.float32),
                                                                    factor) for i in range(len(LESIONS))]),
                             T1_ms_pv=block_mean(T1, factor), sens=block_mean_c(S, factor),
-                            noise_sd=sigma)
+                            noise_sd=sigma,
+                            pose_ref=pose[ref_name] if motion else np.eye(4),
+                            pose_note='truth is at this plane\'s TI800 head pose (object-to-scanner 4x4)')
         if verbose:
             print(f'{plane}: noise SD {sigma:.3g}, truth saved', flush=True)
     # 1.8 mm isotropic truth (scanner frame, voxel n//2 at isocentre)
@@ -247,7 +303,12 @@ def simulate(out_dir, factor=FACTOR, seed=0, noise_ratio=NOISE_RATIO,
                         spacing_mm=1.8, note='axes X (S/I), Y (L/R), Z (A/P); voxel 64 at isocentre')
     json.dump({'tissues': {str(k): v for k, v in TISSUE.items()}, 'lesions': LESIONS,
                'factor': list(factor), 'seed': seed, 'noise_ratio': noise_ratio,
-               'ti_phase_sd_deg': ti_phase_sd_deg}, open(out / 'phantom_config.json', 'w'), indent=1)
+               'ti_phase_sd_deg': ti_phase_sd_deg,
+               'motion': ({k: dict(v, matrix=rigid_matrix(**v).tolist()) for k, v in motion.items()}
+                          if motion else None),
+               'motion_note': 'object-to-scanner pose per scan: p_scanner = R p_object + t; '
+                              'truth_iso.npz is the unmoved head (identity pose)'},
+              open(out / 'phantom_config.json', 'w'), indent=1)
 
 
 def kspace_truncate(img_fine, matrix):
@@ -286,5 +347,8 @@ if __name__ == '__main__':
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--noise', type=float, default=NOISE_RATIO)
     ap.add_argument('--ti-phase-sd', type=float, default=TI_PHASE_SD_DEG)
+    ap.add_argument('--motion', action='store_true',
+                    help='apply the known rigid head motion MOTION_PRESET (per scan)')
     a = ap.parse_args()
-    simulate(a.out_dir, tuple(a.factor), a.seed, a.noise, a.ti_phase_sd)
+    simulate(a.out_dir, tuple(a.factor), a.seed, a.noise, a.ti_phase_sd,
+             MOTION_PRESET if a.motion else None)
