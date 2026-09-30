@@ -1,14 +1,14 @@
 """2D test bed: one readout position (readout iFFT) of a plane -> moba -> T1 vs truth on that slice."""
-import sys, time
+import os, sys, time
 from pathlib import Path
 import numpy as np
-REPO = Path('/Users/jackewins/Documents/MRI_PhD/Projects/Blood-and-bleeds/AGLOW_scans/qT1-iso/.claude/worktrees/agent-a675baaf449620218')
+REPO = Path(__file__).resolve().parents[1]          # repo root (this file is in moba_dev/)
 sys.path.insert(0, str(REPO / 'synth'))
 import pipeline_utils as pu
 from pipeline_utils import bart
 from phantom import load_scans
 
-P = Path.home() / 'work/moba/phantom'
+P = Path(os.environ.get('QT1_PHANTOM_DIR', '~/work/phantom')).expanduser()
 plane, x, opts = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 e = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 sc = load_scans(P)[plane]
@@ -34,4 +34,4 @@ for l, n in ((5, 'WM'), (4, 'GM'), (3, 'CSF'), (6, 'les long'), (7, 'les short')
     if m.any():
         print(f'{n:9s} n={m.sum():5d} |Mss| {np.median(np.abs(xm[..., 0])[m]):8.3f} R1 {np.median(R1[m]):7.3f}  T1 {1000/np.median(R1[m]):8.1f} '
               f'ideal {np.median(truth["T1_ideal_ms"][x][m]):7.1f}')
-np.save(Path.home() / 'work/moba/t2d_last.npy', xm)
+np.save(P / 'moba' / 't2d_last.npy', xm)

@@ -1,10 +1,10 @@
-import sys, glob
+import os, sys, glob
 from pathlib import Path
 import numpy as np
-REPO = Path('/Users/jackewins/Documents/MRI_PhD/Projects/Blood-and-bleeds/AGLOW_scans/qT1-iso/.claude/worktrees/agent-a675baaf449620218')
+REPO = Path(__file__).resolve().parents[1]          # repo root (this file is in moba_dev/)
 sys.path.insert(0, str(REPO / 'synth'))
 import pipeline_utils as pu
-P = Path.home() / 'work/moba/phantom'
+P = Path(os.environ.get('QT1_PHANTOM_DIR', '~/work/phantom')).expanduser()
 plane = sys.argv[1]
 truth = dict(np.load(P / f'truth_{plane}.npz'))
 head = truth['label'] >= 3

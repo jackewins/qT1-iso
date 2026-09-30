@@ -1,4 +1,5 @@
 """Executed cells 0-23 (partial run) + remaining unexecuted cells + final report cell."""
+import sys
 import nbformat as nbf
 
 REPORT = r"""
@@ -106,7 +107,7 @@ phase estimate takes about 5 s per echo.
 7. `PHASE_TAPER` (minor) and echo-group weighting.
 """
 
-done = nbf.read('/Users/jackewins/work/moba/partial.ipynb', 4)
+done = nbf.read(sys.argv[1], 4)          # partially executed copy (run_partial.py output)
 full = nbf.read('Recon_MOBA_V1.ipynb', 4)
 assert len(done.cells) == 24
 cells = done.cells + full.cells[24:-1] + [nbf.v4.new_markdown_cell(REPORT.strip())]

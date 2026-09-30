@@ -4,7 +4,7 @@ import os, sys, time, json
 from pathlib import Path
 import numpy as np
 
-REPO = Path('/Users/jackewins/Documents/MRI_PhD/Projects/Blood-and-bleeds/AGLOW_scans/qT1-iso/.claude/worktrees/agent-a675baaf449620218')
+REPO = Path(__file__).resolve().parents[1]          # repo root (this file is in moba_dev/)
 sys.path.insert(0, str(REPO / 'synth'))
 from phantom import load_scans
 import pipeline_utils as pu
