@@ -75,13 +75,15 @@ LADDER = [  # (label, condition): each step removes one candidate cause
     ('A1 noise-free, ENLIVE 2 sets',     'nf:E2:CAL:def'),
     ('A2 noise-free, ENLIVE 1 set',      'nf:E1:CAL:def'),
     ('A3 noise-free, true maps',         'nf:true:CAL:def'),
-    ('A4 noise-free, true maps, λ→0',    'nf:true:CAL:zero300'),
+    ('A4 noise-free, true maps, λ→0',    'nf:true:CAL:zero'),
 ]
 EXTRA = [
-    ('A4 λ→0, 100 CG iterations',        'nf:true:CAL:zero'),
+    ('A4 λ→0, 300 CG iterations',        'nf:true:CAL:zero300'),
     ('B1 true maps, λ=0.0005',           'nf:true:CAL:lam0.0005'),
     ('B1 true maps, λ=0.00005',          'nf:true:CAL:lam5e-05'),
     ('S  per-TI SENSE, λ→0 (no TI model)', 'nf:true:LLR:zero'),
+    ('C1 ENLIVE 1 set, λ→0',             'nf:E1:CAL:zero'),
+    ('C2 ENLIVE 2 sets, λ→0 (CG breaks down)', 'nf:E2:CAL:zero'),
 ]
 os.environ['QT1_PHANTOM_DIR'], os.environ['QT1_PHANTOM_NF_DIR'] = str(PHANTOM_DIR), str(PHANTOM_NF_DIR)
 scans = ph.load_scans(PHANTOM_DIR)[PLANE]
@@ -358,9 +360,134 @@ br = truth['label'] >= 4
 print(f'λ→0: relative change of the signed signal in brain, 100 → 300 CG iterations: '
       f'{np.linalg.norm(a[br] - b[br]) / np.linalg.norm(b[br]):.4f}')"""))
 
-C.append(md(r"""## 11. Conclusions
+C.append(md(r"""## 11. Where it comes from: the self-calibrated coil maps
 
-_(written after the runs; see the next cell)_"""))
+The ladder points at the coil maps (the step ENLIVE → true maps), so two direct checks:
+
+1. **Do the ENLIVE maps match the true sensitivities?** Per voxel, the ENLIVE map-set-0 vector
+   (8 coils) is projected onto the true map vector with a free complex scale $g$ (so an
+   arbitrary smooth intensity/phase factor between image and maps is allowed); the residual is
+   what $g$ cannot explain. Also: does anything in the maps look like the lesion (core vs WM
+   ring), and how much energy is in map set 1?
+2. **Can the reconstruction explain the measured data?** The TI800 image of each run (echo 0,
+   noise-free data) is pushed back through the forward model with its own maps and compared
+   with the measured k-space. With correct maps this residual is small (model error of the
+   fine-grid simulation only)."""))
+C.append(code(r"""t0_ = truth; St = pu.unit_rss(t0_['sens'])[..., 0]
+fr = truth_c['lesion_frac_by_id']
+def core_ring(i):
+    core, ring = bd.lesion_masks(truth_c, i); return core, ring
+print(f"{'maps':5s} {'lesion':7s} {'|g| core/ring':>15s} {'unexplained map fraction core/ring':>36s} {'map set 1 RSS core/ring':>26s}")
+for tag in ('E2', 'E1'):
+    S = np.load(CACHE / f'sens_{PLANE}_nf_{tag}_e0.npz')['s']
+    g = np.sum(np.conj(St) * S[..., 0], -1) / np.maximum(np.sum(np.abs(St) ** 2, -1), 1e-12)
+    resid = np.sqrt(np.sum(np.abs(S[..., 0] - g[..., None] * St) ** 2, -1))
+    rss1 = np.sqrt(np.sum(np.abs(S[..., 1]) ** 2, -1)) if S.shape[-1] > 1 else np.zeros(g.shape)
+    for i in (0, 4, 6):
+        core, ring = core_ring(i)
+        print(f"{tag:5s} L{i+1:<6d} {np.abs(g[core]).mean():7.3f}/{np.abs(g[ring]).mean():.3f} {resid[core].mean():27.3f}/{resid[ring].mean():.3f} "
+              f"{rss1[core].mean():19.3f}/{rss1[ring].mean():.3f}")
+
+sc_nf = ph.load_scans(PHANTOM_NF_DIR)[PLANE]; t_, d_ = pu.load_echo(sc_nf[-1]['stem'], 0)
+def kresid(cond, maps):
+    x = res[cond]['z']['img0'][..., -1]                                   # TI800, (X,Y,Z,M)
+    S = pu.unit_rss(truth['sens']) if maps == 'true' else np.load(CACHE / f'sens_{PLANE}_nf_{maps}_e0.npz')['s']
+    S = S if S.ndim == 5 else S[..., None]
+    k = pu.bart(1, 'nufft', t_, np.sum(x[:, :, :, None, :] * S, -1).astype(np.complex64)).reshape(d_.shape)
+    return np.linalg.norm(k - d_) / np.linalg.norm(d_)
+print('\nrelative k-space residual at TI800, echo 0, noise-free data:')
+for cond, maps in (('nf:true:CAL:zero', 'true'), ('nf:true:CAL:def', 'true'), ('nf:E1:CAL:zero', 'E1'),
+                   ('nf:E1:CAL:def', 'E1'), ('nf:E2:CAL:def', 'E2'), ('nf:E2:CAL:zero', 'E2')):
+    print(f"  {res[cond]['label']:42s} {kresid(cond, maps):.4f}")"""))
+C.append(md(r"""**Reading.** The ENLIVE maps contain nothing lesion-shaped (core and ring are identical), but
+they are far from the true sensitivities: after allowing a free complex scale per voxel,
+30–57 % of the map vector is left unexplained, for one and for two map sets, and map set 1
+carries ~45–50 % RSS everywhere (as on the real data). With **one** ENLIVE set, 31 % of the
+noise-free k-space cannot be explained, with or without regularisation (true maps: 2.6–4.5 %,
+which is the simulation's own model error). **Two** sets bring the residual down to 4.2 % —
+not by being right, but by doubling the unknowns (8800 complex unknowns vs 5888 samples per
+readout position and TI: under-determined), so the data are fitted by a different split of the
+signal between the two sets. At the 10 mm short-T1 lesion (echo 0, A1) the TI150 contrast is
+indeed split: set 0 keeps −0.036 (true +0.10) and set 1 holds +0.056 against −0.014 in the WM
+ring, and the phase-referenced sum loses most of it. The unregularised 2-set run (C2) is not a
+valid solution: its data residual is 6× the data norm, i.e. CG broke down on the singular
+problem, so its T1 values are ignored."""))
+
+C.append(md(r"""## 12. Conclusions
+
+**Answer.** The pull of lesion T1 towards WM is **not** partial volume from lost resolution and
+not a property of the subspace (or LLR) model itself. On this phantom it comes mainly from the
+**self-calibrated coil maps**, with a smaller contribution from the **regulariser**; noise and
+undersampling as such contribute essentially nothing.
+
+| step removed (sequential) | short-T1 lesions 10/6/4 mm | long-T1 lesions 10/6/4 mm | evidence |
+|---|---|---|---|
+| pipeline (phases, PSIR, echo average, fit) | ±0.3 % | ±0.3 % | fully sampled control = ideal |
+| noise (0 → A1) | ≤ 1.5 pts | ≤ 2.5 pts | noisy ≈ noise-free |
+| ENLIVE 2 sets → true maps (A1 → A3) | 9.9 / 3.0 / 11.3 pts | 2.2 / 22.9 / 2.1 pts | biggest step; map errors 30–57 %, data residual 31 % with 1 set |
+| regularisation λ = 0.005 → 0 (A3 → A4) | 2.1 / 5.4 / 4.8 pts | 0.6 / 7.4 / 4.0 pts | gone already at λ = 0.0005 (noise-free) |
+| undersampling itself (A4) | 0.1 / −0.4 / −0.2 % | −2.8 / +3.9 / −0.9 % | per-TI SENSE without any TI model gives the same |
+
+(stored masks; with centred masks the ENLIVE step is 10.5 / 5.8 / 15.3 and the regulariser
+step 2.7 / 8.5 / 6.9 points for the short-T1 lesions — the regulariser matters more for the
+4–6 mm lesions than the stored masks suggest.)
+
+**Mechanism.**
+1. *The shape of the error is contrast loss, not blur.* In the line profiles the lesion bump of
+   $S(TI150)/S(TI800)$ keeps its width in all three directions but loses ~¾ of its height with
+   ENLIVE maps; with the true maps the height returns. The mixing fit agrees: the reconstructed
+   lesion curve is a mix of ~50 % lesion and ~50 % surrounding-WM curve with a small residual,
+   i.e. the lesion looks diluted with WM — which is why it reads as "beyond partial volume".
+   Pure Gaussian blur would need ≈ 2–3 voxels FWHM in-plane to produce the same bias, which the
+   images do not show.
+2. *Why wrong maps dilute the lesion rather than add noise.* With inaccurate maps the unfolding
+   of the ≈ 6-fold aliasing is imperfect, so some of a voxel's signal is assigned to its alias
+   partners and some of theirs to it. Because **every TI uses the same sampling pattern**, the
+   exchanged signal is a genuine IR curve of other tissue (mostly WM, the most abundant tissue
+   at the alias positions), identical in form at every TI — so neither a temporal subspace nor a
+   low-rank model can tell it apart from true signal. The regulariser then removes the obvious
+   artefacts (unregularised reconstructions with ENLIVE maps are much worse: C1), leaving a
+   clean-looking image whose small, lesion-specific contrast is diluted. *This leakage step is
+   inferred from the evidence above (width preserved, WM-like mixing, maps unable to explain
+   the data), not imaged directly.*
+3. *Two map sets hide the map error rather than fix it*: they restore data consistency by
+   doubling the unknowns, and the lesion contrast ends up split between the sets and partly lost
+   in the phase-referenced combination. With one ENLIVE set the error shows up openly (band-like
+   T1 artefacts, WM T1 SD 57 ms vs 6 ms with the true maps, lesion errors of both signs).
+4. *The regulariser adds a second, smaller pull* (λ = 0.005: 2–8 points, largest for the 4–6 mm
+   lesions): wavelet shrinkage of the small T1-carrying coefficients. With correct maps it
+   vanishes by λ = 0.0005 — on noise-free data; with noise, a smaller λ costs SD, which is the
+   trade-off the tuning has to make.
+
+This also explains the observation that started the question: LLR's block size hardly changes
+the bias because the dominant cause is upstream of the regulariser (maps + identical sampling
+across TIs), shared by both methods. That LLR follows the same ladder is expected but **not
+tested here** (LLR runs locally): `python synth/run_bias_experiments.py <cache> nf:E2:LLR:def
+nf:true:LLR:def` would confirm it (≈ 2 × 15 min on the laptop).
+
+**Other findings.**
+* The 6 mm long-T1 lesion's −25 % in V1 (a "band of low T1") is a coil-map artefact: it
+  disappears with the true maps.
+* WM/GM −2 % with 2 map sets is also map-driven (0 % with 1 set or the true maps).
+* **CSF** recovers with the true maps at λ = 0.005 (−2.5 %). Since `fit_t1_grid`'s closed-form
+  M0 may be negative, a global polarity flip alone cannot cause the CSF failure; CSF's TI800
+  signal is near its null (≈ −0.03 M0), so it is the phase reference at TI800 that is fragile.
+  Out of scope here, but the brief's explanation should be revisited.
+* Unregularised CG is only semi-convergent even with the true maps (100 → 300 iterations
+  changes the images by 59 % and biases WM by −10 %): the unregularised problem is
+  ill-conditioned, so some regularisation is needed even without noise.
+* The stored lesion masks are off-centre (section 4a; phantom truth issue, reported).
+
+**Consequences for tuning (task 2).**
+* Coil-map calibration comes **before** λ: ENLIVE (`ncalib`) settings (Newton steps,
+  calibration region, regularisation), or another calibration, judged on the phantom by lesion
+  bias and on real data (locally, no truth needed) by the **k-space residual with one map set**
+  relative to the noise floor — that check transfers directly.
+* Then λ/iterations, where the lesion bias from the regulariser is now visible on its own.
+* Caveat for transfer: the phantom's coils are 8 idealised loops; how wrong ENLIVE is on the
+  real Hyperfine data cannot be known from here, but the band artefact with one map set and the
+  large map-set-1 energy on the real data point the same way."""))
+
 
 nb = nbf.v4.new_notebook(); nb['cells'] = C
 nb['metadata']['kernelspec'] = {'name': 'python3', 'display_name': 'Python 3', 'language': 'python'}
