@@ -595,6 +595,8 @@ def moba_slice(Dx, T2, TI_f, ny, nz, cmd, info_slice):
              scale_data=num('Scaling'), scale_psf=num('Scaling_psf'),
              steps=np.array([float(v) for v in re.findall(r'Step: \d+, Res: ([0-9.eE+-]+)', log)]))
     r['final_res'], r['noise_floor'] = ds.data_residual(r, Dx, T2, info_slice)
+    with open(PROC_DIR / 'moba_progress.log', 'a') as fh:          # progress of long runs (one line per slice)
+        fh.write(f"{time.strftime('%H:%M:%S')} {info_slice['tag']} res/noise {r['final_res'] / r['noise_floor']:.2f}\n")
     return r
 
 
@@ -618,8 +620,8 @@ def moba_recon(scans_plane, e, plane):
     info_slice = dict(matrix=matrix, noise_sd=info['noise_sd'], TI=np.real(TI_f).ravel())
     t0 = time.time()
     with ThreadPoolExecutor(MOBA_JOBS) as ex:
-        out = list(ex.map(lambda x: moba_slice(np.ascontiguousarray(Dx[:, x:x + 1]), T2, TI_f, ny, nz, cmd, info_slice),
-                          range(nx)))
+        out = list(ex.map(lambda x: moba_slice(np.ascontiguousarray(Dx[:, x:x + 1]), T2, TI_f, ny, nz, cmd,
+                                               dict(info_slice, tag=f'{plane} e{e} x={x}')), range(nx)))
     dt = time.time() - t0
     res = {k: np.stack([o[k] for o in out]) for k in ('maps', 'sens', 'scale_data', 'scale_psf', 'steps',
                                                       'final_res', 'noise_floor')}
@@ -755,7 +757,7 @@ v1_md_replace(38, [("## 16. What a per-plane T1 output means", "## 17. What a pe
 
 REPORT = Path(__file__).with_name('report_v2.md')
 if REPORT.exists():
-    md(REPORT.read_text())
+    md(REPORT.read_text().replace('TUNING_PLAN', Path(__file__).with_name('tuning_plan_v2.md').read_text().strip()))
 else:
     md('## 18. Report (V2)\n\n*(written after execution)*')
 

@@ -106,7 +106,7 @@ def run(plane, x, opts, e=0, ti_scale=1.0, threads=1, ksp_sens=None):
         import uuid
         from pipeline_utils import cfl
         tmpf = str(DIAG_DIR / f'kspsens_{uuid.uuid4().hex}')
-        cfl.writecfl(tmpf, np.asarray(ksp_sens, np.complex64).reshape(ksp_sens.shape + (1,) * (16 - ksp_sens.ndim))[..., :])
+        cfl.writecfl(tmpf, np.asarray(ksp_sens, np.complex64))       # (1, 2ny, 2nz, coil)
         cmd += f' --other ksp-sens={tmpf}'
     t0 = time.time()
     res, log, err = bart_quiet(2, cmd, y, TI_f, threads=threads, t=T2)
