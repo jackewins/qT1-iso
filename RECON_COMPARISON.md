@@ -49,6 +49,14 @@ python synth/phantom.py /some/work/dir        # ~10-20 min, several GB RAM
   M0, lesion_id, lesion_fraction = partial-volume fraction, true coil maps `sens`),
   `truth_iso.npz` on a 1.8 mm isotropic grid, `phantom_config.json`.
 * `phantom.load_scans(out_dir)` returns `{plane: [ {name, stem, info}, ...by TI ]}`.
+* **Motion (optional):** `python synth/phantom.py <dir> --motion` applies known rigid head
+  motion per scan (`MOTION_PRESET` in `phantom.py`): drifts within each plane (<= 1 mm,
+  <= 0.7 deg), a 2 mm step before axial TI800, and 1.5-3 mm / 1.5-2 deg offsets between planes.
+  Coils stay fixed to the scanner (the head moves inside the coil). Poses are saved in
+  `phantom_config.json` (object-to-scanner 4x4 per scan); each plane's truth is at its TI800
+  pose (`truth_<PLANE>.npz['pose_ref']`), and `truth_iso.npz` is the unmoved head, so any
+  registration can be scored against the known transforms. Without `--motion` the head is
+  static (all numbers below are for the static phantom).
 
 Note: every lesion is at or below the 5 mm slice thickness in at least one direction of
 every plane, so partial volume is expected, especially for 2 and 4 mm.
