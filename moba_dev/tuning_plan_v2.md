@@ -8,7 +8,7 @@ initialisation → image-quality sweeps. Costs on this 4-core container (one rea
 |---|---|---|
 | **screen** | 13 readout slices (x = 8…104) × 2 echo groups: stability over the whole head | ≈ 5.5 min |
 | **lesion slab** | the 18 readout slices through all 8 lesions (x = 62-79) × 2 echo groups: per-lesion bias vs ideal, WM/GM in the slab, figures | ≈ 7.5 min |
-| **full plane** | 112 slices × 2 echo groups (section 8) | ≈ 46 min |
+| **full plane** | 112 slices × 2 echo groups (section 8) | ≈ 35 min (measured) |
 
 Every stage reports bias vs ideal (the key number) per tissue and per lesion, SD, the
 per-slice residual/noise-floor QC, and runtime; grid figures as in
@@ -20,7 +20,7 @@ images, and the error vs ideal, all with shared windows.
 converges, i.e. how much regularisation stability forces on us (V2's 0.3 is conservative:
 0.1 diverges in 6/26 slice runs). *Grid:* `-j` ∈ {0.15, 0.2, 0.25} on the screen; `-R 3` at the
 lowest stable value; and an **adaptive fallback** (run at the lower α_min, re-run only the
-slices flagged by the residual QC at 0.3). *Runtime:* ≈ 25 min (screens) + 46 min
+slices flagged by the residual QC at 0.3). *Runtime:* ≈ 25 min (screens) + 35 min
 (full-plane confirmation of the choice). *Decision:* smallest α_min with 0 flagged slice runs,
 plus one grid step of margin — or the adaptive fallback if the boundary is slice-specific
 and the lower α_min clearly reduces lesion bias. *Caveat:* one noise realisation; optionally
@@ -50,7 +50,7 @@ coronal band artefact of single-map ENLIVE, which the phantom cannot show).
 
 **Stage 5 — image-quality sweep for visual assessment.** A 3 × 3 grid around the chosen
 point (rows: α_min or `l1val`; columns: Newton steps) on the lesion slab (≈ 80 min), figures
-and phantom table per cell. Then the final full-plane run (46 min) and AX/SAG (≈ 90 min).
+and phantom table per cell. Then the final full-plane run (35 min) and AX/SAG (≈ 90 min).
 
 **Open design items (not tuning; later, on request):** 3D `moba` instead of slice-wise (the
 fixed, noise-referenced scaling removes V1's reason for its failure; one 3D run ≈ 1-2 h
