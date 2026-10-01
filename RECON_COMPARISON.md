@@ -35,9 +35,11 @@ python synth/phantom.py /some/work/dir        # ~10-20 min, several GB RAM
 ```
 
 * Anatomy: nested head ellipsoids (scalp fat, skull, CSF, cortical GM, WM), ventricles,
-  deep GM, and 8 spherical WM lesions: diameters 2, 4, 6, 10 mm at T1 = 338 ms (+30 %)
-  and 182 ms (-30 %) vs WM mid-range 260 ms. Lesion M0 = WM M0 (T1 contrast only).
-* T1 varies smoothly in space within: WM 240-280, GM 240-380, CSF 3400-3700 ms
+  deep GM, and 8 spherical WM lesions: diameters 2, 4, 6, 10 mm at T1 = 357.5 ms (+30 %)
+  and 192.5 ms (-30 %) vs WM mid-range 275 ms. Lesion M0 = WM M0 (T1 contrast only).
+* T1 varies smoothly in space within: WM 250-300, GM 310-370, CSF 3400-3700 ms; within each
+  tissue the values follow a bell-shaped distribution centred mid-range (SD ~15 % of the
+  range), as in healthy tissue
   (fat 180 ms and bone are placeholders).
 * 8 synthetic coils, smooth background phase, a per-scan global phase offset
   (SD 5°, as measured between TI scans on real data), extra phase on echo group 1.
@@ -71,6 +73,14 @@ reconstruction's own error** and is the number to compare methods on. Check the 
 with `python synth/check_phantom.py <dir>` (writes check_*.png).
 
 ### Reference result: current LLR method, coronal phantom plane
+
+> **Phantom v2 (2026-10-01): this table is from phantom v1 and must be regenerated.** v2 changes
+> the tissue T1 ranges (WM 250-300, GM 310-370 ms; lesions 357.5 / 192.5 ms) and fixes the
+> partial-volume truth maps (`lesion_fraction`, `lesion_frac_by_id`, `T1_ms_pv`, `sens`): in v1
+> they were block means offset by (f-1)/2 fine samples from the reconstruction voxels (0.25
+> voxel in-plane, 0.375 voxel = 1.9 mm through-plane), so the lesion evaluation masks sat at
+> one edge of each lesion and the per-lesion `ideal` values carried extra partial volume. The
+> k-space data were not affected (same seed -> same noise and phases).
 
 `python synth/run_llr_reference.py <dir> COR` (shared-TI self-calibrated maps, 2 map sets,
 `pics -e -S -N -R L:7:7:0.006 -i 80 -b 4 -U`, both echo groups, PSIR, grid fit;

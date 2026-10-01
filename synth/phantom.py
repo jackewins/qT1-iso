@@ -18,9 +18,11 @@ it. Bias relative to ``T1_ideal_ms`` is attributable to the reconstruction alone
 ``T1_ideal_ms`` relative to ``T1_ms`` is the unavoidable partial-volume effect.
 
 Tissue T1 (ms) at 64 mT, varying smoothly in space within these ranges:
-WM 240-280, GM 240-380, CSF 3400-3700 (literature ranges supplied by the user).
+WM 250-300, GM 310-370, CSF 3400-3700 (literature ranges supplied by the user; within each
+tissue the smooth field gives a bell-shaped distribution centred mid-range, SD ~15 % of the
+range, with its tails at the bounds).
 Fat (180 ms) and bone are placeholders. Lesions: spheres of 2, 4, 6 and 10 mm diameter
-in white matter with T1 = 1.3 x and 0.7 x the mid-range WM T1 (338 and 182 ms), M0 equal
+in white matter with T1 = 1.3 x and 0.7 x the mid-range WM T1 (357.5 and 192.5 ms), M0 equal
 to WM, so they differ from WM in T1 only.
 
 Signal model (the one the reconstructions fit):
@@ -66,10 +68,10 @@ TISSUE = {
     1: ('fat', (180.0, 180.0), 0.90),     # placeholder T1
     2: ('bone', (300.0, 300.0), 0.05),    # placeholder, little signal
     3: ('CSF', (3400.0, 3700.0), 1.00),
-    4: ('GM', (240.0, 380.0), 0.80),
-    5: ('WM', (240.0, 280.0), 0.65),
-    6: ('lesion_long', (338.0, 338.0), 0.65),    # 1.3 x 260 ms
-    7: ('lesion_short', (182.0, 182.0), 0.65),   # 0.7 x 260 ms
+    4: ('GM', (310.0, 370.0), 0.80),
+    5: ('WM', (250.0, 300.0), 0.65),
+    6: ('lesion_long', (357.5, 357.5), 0.65),    # 1.3 x 275 ms (WM mid-range)
+    7: ('lesion_short', (192.5, 192.5), 0.65),   # 0.7 x 275 ms
 }
 # Nested head ellipsoids, semi-axes in (L/R, A/P, S/I) mm; each shell is (outer, label).
 SHELLS = [((76, 96, 88), 1),   # scalp fat
@@ -141,12 +143,15 @@ def bart_traj(coord, matrix, n_read, echo):
     return t.astype(np.complex64)
 
 
-def grid_coords(matrix, fov_mm, geom, factor=(1, 1, 1)):
+def grid_coords(matrix, fov_mm, geom, factor=(1, 1, 1), centred=False):
     """Scanner-frame coordinates (X, Y, Z in mm) of every voxel of a (possibly refined)
-    encoding grid. Voxel n//2 sits at isocentre, as in BART's image convention."""
+    encoding grid. Voxel n//2 sits at isocentre, as in BART's image convention.
+    centred=True shifts a refined grid by -(f-1)/2 fine samples per axis, so that each block of
+    f fine samples is centred on its reconstruction voxel (for block-mean truth maps)."""
     n = [m * f for m, f in zip(matrix, factor)]
     sp = [fv / nn for fv, nn in zip(fov_mm, n)]
-    ax = [(np.arange(nn) - nn // 2) * s for nn, s in zip(n, sp)]
+    sh = [-(f - 1) / 2 * s if centred else 0.0 for f, s in zip(factor, sp)]
+    ax = [(np.arange(nn) - nn // 2) * s + o for nn, s, o in zip(n, sp, sh)]
     A = np.meshgrid(*ax, indexing='ij')
     xyz = [None, None, None]
     for j, a in enumerate(geom):
@@ -277,7 +282,12 @@ def simulate(out_dir, factor=FACTOR, seed=0, noise_ratio=NOISE_RATIO,
                     'R_header': s['undersampling_header'], 'n_pe': s['n_pe'],
                     'acq_time': 'synthetic', 'noise_sd': float(sigma), 'ti_phase_rad': float(dphi)}
             json.dump(info, open(f'{stem}_info.json', 'w'), indent=2)
-        # ground truth on the reconstruction grid of this plane
+        # ground truth on the reconstruction grid of this plane. Partial-volume quantities are
+        # block means over a fine grid whose blocks are CENTRED on the reconstruction voxels
+        # (the simulation grid's blocks are offset by (f-1)/2 fine samples).
+        Xb, Yb, Zb = grid_coords(s0['matrix'], s0['fov_mm'], s0['geometry'], factor, centred=True)
+        _, T1b, _, lesb = tissue_maps(*to_object(Xb, Yb, Zb, pose[ref_name]), seed)
+        Sb = coil_maps(Xb, Yb, Zb, spec['n_coils'])
         Xc, Yc, Zc = grid_coords(s0['matrix'], s0['fov_mm'], s0['geometry'])
         labc, T1c, M0c, lesc = tissue_maps(*to_object(Xc, Yc, Zc, pose[ref_name]), seed)
         S_ideal = np.stack(ideal, -1)                                   # (X, Y, Z, TI)
@@ -285,10 +295,10 @@ def simulate(out_dir, factor=FACTOR, seed=0, noise_ratio=NOISE_RATIO,
         T1_ideal, _, _ = fit_t1_grid(S_ideal, TIa, TRa, labc >= 3)
         np.savez_compressed(out / f'truth_{plane}.npz', label=labc, T1_ms=T1c, M0=M0c, lesion_id=lesc,
                             S_ideal=S_ideal.astype(np.float32), T1_ideal_ms=1000 * T1_ideal,
-                            lesion_fraction=block_mean((les > 0).astype(np.float32), factor),
-                            lesion_frac_by_id=np.stack([block_mean((les == i + 1).astype(np.float32),
+                            lesion_fraction=block_mean((lesb > 0).astype(np.float32), factor),
+                            lesion_frac_by_id=np.stack([block_mean((lesb == i + 1).astype(np.float32),
                                                                    factor) for i in range(len(LESIONS))]),
-                            T1_ms_pv=block_mean(T1, factor), sens=block_mean_c(S, factor),
+                            T1_ms_pv=block_mean(T1b, factor), sens=block_mean_c(Sb, factor),
                             noise_sd=sigma,
                             pose_ref=pose[ref_name] if motion else np.eye(4),
                             pose_note='truth is at this plane\'s TI800 head pose (object-to-scanner 4x4)')
