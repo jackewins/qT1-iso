@@ -32,6 +32,8 @@ difference between consecutive rows is that cause's contribution (a sequential d
 interactions are attributed to the step where they disappear).
 
 All data are the synthetic phantom (`synth/phantom.py`); nothing here uses real subject data.
+
+> **Phantom version.** This notebook was executed on **phantom v1** (WM 240-280, GM 240-380 ms, lesions 338 / 182 ms, off-centre truth block means; archived as `~/work/phantom_v1`, `~/work/phantom_nf_v1`, cache `~/work/bias_v1`). Phantom v2 (2026-10-01) changes the T1 ranges and centres the truth maps; the conclusions here do not depend on either. Re-running it on v1 with the current `pipeline_utils` would show v2 lesion T1 in the `true` column (bias vs ideal is unaffected).
 Reconstructions are run by `synth/run_bias_experiments.py` (cached outside the repo), so this
 notebook only loads, evaluates and plots; it recomputes a condition only if its cache is missing."""))
 
@@ -65,9 +67,9 @@ noise is absent). `CACHE` holds the runs of `run_bias_experiments.py`.
 Conditions are named `<data>:<maps>:<method>:<reg>` (see the script's docstring). CALIPR is
 V1 exactly (`pics -e -S -R W:7:0:0.005 -i 80 -U`, K = 3 dictionary basis, per-TI global phase
 demodulation)."""))
-C.append(code(r"""PHANTOM_DIR    = Path(os.environ.get('QT1_PHANTOM_DIR', Path.home() / 'work' / 'phantom'))
-PHANTOM_NF_DIR = Path(os.environ.get('QT1_PHANTOM_NF_DIR', Path.home() / 'work' / 'phantom_nf'))
-CACHE          = Path(os.environ.get('QT1_BIAS_CACHE', Path.home() / 'work' / 'bias'))
+C.append(code(r"""PHANTOM_DIR    = Path(os.environ.get('QT1_PHANTOM_DIR', Path.home() / 'work' / 'phantom_v1'))
+PHANTOM_NF_DIR = Path(os.environ.get('QT1_PHANTOM_NF_DIR', Path.home() / 'work' / 'phantom_nf_v1'))
+CACHE          = Path(os.environ.get('QT1_BIAS_CACHE', Path.home() / 'work' / 'bias_v1'))
 PLANE = 'COR'
 
 LADDER = [  # (label, condition): each step removes one candidate cause
