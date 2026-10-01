@@ -145,7 +145,7 @@ def spacing_of(info):
     return tuple(f / n for f, n in zip(info['fov_mm'], info['matrix']))
 
 
-TRUE_LESION_T1 = {6: 338.0, 7: 182.0}   # label -> T1 (ms), see phantom.TISSUE
+TRUE_LESION_T1 = {6: 357.5, 7: 192.5}   # label -> T1 (ms); evaluate_t1 reads phantom.TISSUE
 
 
 def evaluate_t1(T1_s, truth):
@@ -164,16 +164,17 @@ def evaluate_t1(T1_s, truth):
         v = T1[m]; t = truth['T1_ms'][m]
         rows.append(_row(name, m, T1, truth, float(t.mean())))
     try:
-        from phantom import LESIONS
+        from phantom import LESIONS, TISSUE
+        lesion_t1 = {l: float(TISSUE[l][1][0]) for l in TRUE_LESION_T1}
     except ImportError:
-        LESIONS = None
+        LESIONS, lesion_t1 = None, TRUE_LESION_T1
     for i, fr in enumerate(truth['lesion_frac_by_id']):
         # each lesion: voxels holding at least half of its peak partial-volume fraction.
         # peak_pv < 1 means no voxel is fully lesion (lesion smaller than a voxel), which
         # caps the contrast any reconstruction can recover.
         m = (fr >= 0.5 * fr.max()) & np.isfinite(T1) if fr.max() > 0 else np.zeros_like(fr, bool)
         d = LESIONS[i][2] if LESIONS else None
-        t_true = float(TRUE_LESION_T1.get(LESIONS[i][0], np.nan)) if LESIONS else np.nan
+        t_true = float(lesion_t1.get(LESIONS[i][0], np.nan)) if LESIONS else np.nan
         r = _row(f'lesion {i + 1} ({d} mm)' if d else f'lesion {i + 1}', m, T1, truth, t_true)
         r['peak_pv'] = float(fr.max())
         rows.append(r)
