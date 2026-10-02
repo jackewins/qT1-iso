@@ -34,6 +34,20 @@ from phantom import load_scans  # noqa: E402
 
 PHANTOM_DIR = Path(os.environ.get('QT1_PHANTOM_DIR', '~/work/phantom')).expanduser()
 DIAG_DIR = PHANTOM_DIR / 'moba' / 'diag'
+
+
+def phantom_fingerprint(phantom_dir=None):
+    """Short hash of phantom_config.json (tissue T1 ranges, lesions, seed, noise, motion). Every
+    cache is keyed by it, so results from another phantom version are never reused."""
+    import hashlib
+    f = Path(phantom_dir or PHANTOM_DIR) / 'phantom_config.json'
+    return hashlib.sha1(f.read_bytes()).hexdigest()[:8] if f.exists() else 'nocfg'
+
+
+def cache_dir():
+    d = DIAG_DIR / f'cache_{phantom_fingerprint()}'
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 PHASE_TAPER = 0.15
 _bw = sys.modules[bart.__module__]
 
@@ -64,10 +78,9 @@ def prepare(plane, e):
     key = (plane, e)
     if key in _prep_cache:
         return _prep_cache[key]
-    DIAG_DIR.mkdir(parents=True, exist_ok=True)
     scans = load_scans(PHANTOM_DIR)[plane]
     matrix = scans[pu.REF_TI_IDX]['info']['matrix']
-    f = DIAG_DIR / f'prep_{plane}_e{e}.npz'
+    f = cache_dir() / f'prep_{plane}_e{e}.npz'
     if f.exists():
         z = np.load(f)
         Dx, T2, dphi = z['Dx'], z['T2'], z['dphi']
@@ -105,7 +118,7 @@ def run(plane, x, opts, e=0, ti_scale=1.0, threads=1, ksp_sens=None):
     if ksp_sens is not None:                           # initial coils (moba k-space representation)
         import uuid
         from pipeline_utils import cfl
-        tmpf = str(DIAG_DIR / f'kspsens_{uuid.uuid4().hex}')
+        tmpf = str(cache_dir() / f'kspsens_{uuid.uuid4().hex}')
         cfl.writecfl(tmpf, np.asarray(ksp_sens, np.complex64))       # (1, 2ny, 2nz, coil)
         cmd += f' --other ksp-sens={tmpf}'
     t0 = time.time()
@@ -232,13 +245,12 @@ def job_key(j):
 
 
 def save_cached(j, r):
-    (DIAG_DIR / 'cache').mkdir(parents=True, exist_ok=True)
-    np.savez(DIAG_DIR / 'cache' / f'{job_key(j)}.npz', **{k: r[k] for k in KEEP if k in r},
+    np.savez(cache_dir() / f'{job_key(j)}.npz', **{k: r[k] for k in KEEP if k in r},
              opts=j['opts'], ksp_tag=j.get('ksp_tag', ''))
 
 
 def load_cached(j):
-    f = DIAG_DIR / 'cache' / f'{job_key(j)}.npz'
+    f = cache_dir() / f'{job_key(j)}.npz'
     if not f.exists():
         return None
     z = np.load(f)
@@ -250,7 +262,8 @@ def load_cached(j):
 def run_many(jobs, n_parallel=None, verbose=True):
     """jobs: list of dicts with keys plane, x, opts, e (optional: tag, ti_scale, ksp_sens with a
     ksp_tag naming it). Runs them in parallel (one thread each), caches every result in
-    DIAG_DIR/cache (keyed by plane, slice, echo, options) and returns them in job order."""
+    DIAG_DIR/cache_<phantom fingerprint> (keyed by plane, slice, echo, options) and returns them
+    in job order."""
     from concurrent.futures import ThreadPoolExecutor
     n_parallel = n_parallel or os.cpu_count()
     for j in jobs:                                   # prepare serially (shared cache)
