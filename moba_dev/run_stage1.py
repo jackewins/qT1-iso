@@ -5,8 +5,9 @@ Recon_MOBA_Tuning_S1.ipynb shows. Run from the repo root:
 
 1. screen: 13 readout slices (x = 8..104) x 2 echo groups for each -j in J_SCREEN (single-slice
    harness, cached in <phantom>/moba/diag/cache_<fingerprint>);
-2. full coronal planes for -j 0.3 (V2 baseline) and every -j that passes the screen (0 slice runs
-   with raw residual > 1.5 x noise floor), lowest first (cached in <phantom>/moba/);
+2. full coronal planes (planes_to_run): -j 0.3 (V2 baseline), the lowest -j that passes the screen
+   (0 slice runs with raw residual > 1.5 x noise floor) and the next grid value below it (cached in
+   <phantom>/moba/);
 3. a -R 3 screen at the lowest passing -j.
 Progress: <phantom>/moba/stage1.log (milestones) and moba_progress.log (one line per slice).
 """
@@ -27,7 +28,22 @@ from phantom import load_scans  # noqa: E402
 PLANE = 'COR'
 XS = list(range(8, 112, 8))
 J_SCREEN = (0.1, 0.15, 0.2, 0.25, 0.3)
-J_PLANES = (0.15, 0.2, 0.25)          # full planes only for these if they pass (plus 0.3 always)
+J_PLANES = (0.15, 0.2, 0.25)          # candidate grid for full planes (plus 0.3 always)
+
+
+def planes_to_run(passing):
+    """Full planes: 0.3 (V2 baseline), the lowest passing value, and the next grid value below it
+    (fails the screen: the case the adaptive fallback is for). At most 3 planes (approved budget)."""
+    out = [0.3]
+    if passing:
+        jl = min(passing)
+        out.append(jl)
+        below = [j for j in J_SCREEN if j < jl and j in J_PLANES]
+        if below:
+            out.append(max(below))
+    return list(dict.fromkeys(out))
+
+
 BASE = '-L -l1 -i 10 -C 100 --sobolev_a 220'
 FLAG = 1.5
 
@@ -83,7 +99,8 @@ if __name__ == '__main__':
     log(f'passing: {passing}', L)
     if '--no-planes' not in sys.argv:
         scans = load_scans(ds.PHANTOM_DIR)[PLANE]
-        order = [0.3] + sorted(j for j in passing if j in J_PLANES)
+        order = planes_to_run(passing)
+        log(f'full planes: {order}', L)
         for j in order:
             for e in (0, 1):
                 t0 = time.time()

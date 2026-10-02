@@ -76,6 +76,8 @@ now executed end to end (V1's sections 10-15 were never run).
 **Not tuned yet.** V2 is the first configuration that is *stable*; α_min, iterations,
 regulariser and coil initialisation are tuned next, stage by stage with the researcher
 (section 18 lists the plan).
+
+> **Phantom version.** This notebook was executed on **phantom v1** (WM 240-280, GM 240-380 ms, lesions 338/182 ms; lesion masks offset by 0.375 voxel through-plane). Phantom v2 (`recon-comparison` f2840be: WM 250-300, GM 310-370 ms, lesions 357.5/192.5 ms, centred truth maps) is used from tuning stage 1 on: see `Recon_MOBA_Tuning_S1.ipynb` for the V2 configuration (α_min 0.3) re-run on v2. To reproduce this notebook, point `QT1_PHANTOM_DIR` at a v1 phantom (`git show ed42fb2:synth/phantom.py`).
 """)
 
 md("## 1. Environment")

@@ -41,7 +41,9 @@ def phantom_fingerprint(phantom_dir=None):
     cache is keyed by it, so results from another phantom version are never reused."""
     import hashlib
     f = Path(phantom_dir or PHANTOM_DIR) / 'phantom_config.json'
-    return hashlib.sha1(f.read_bytes()).hexdigest()[:8] if f.exists() else 'nocfg'
+    if not f.exists():          # phantom.py writes it last: no config = phantom incomplete
+        raise FileNotFoundError(f'{f} missing: phantom generation not finished (or not a phantom dir)')
+    return hashlib.sha1(f.read_bytes()).hexdigest()[:8]
 
 
 def cache_dir():

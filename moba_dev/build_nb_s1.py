@@ -157,12 +157,15 @@ print('passing:', PASSING)
 md(r"""
 ## 5. Full coronal planes: per-slice convergence
 
-For α_min = 0.3 (the V2 baseline, now on phantom v2) and every value that passed the screen and is
-in the planned grid {0.15, 0.2, 0.25}: all 112 readout slices × 2 echo groups. The full plane is
-the real stability test (224 slice runs vs 26 in the screen).
+Three full planes (the approved budget): α_min = 0.3 (the V2 baseline, now on phantom v2), the
+**lowest value that passed** the screen, and the **next grid value below it**, which failed the
+screen in a few slices — the case the adaptive fallback (section 8) is for, and the one that
+shows what less regularisation buys. All 112 readout slices × 2 echo groups each; the full plane
+is the real stability test (224 slice runs vs 26 in the screen).
 """)
 code(r"""
-PLANE_J = [0.3] + sorted(j for j in PASSING if j in S1.J_PLANES)
+PLANE_J = S1.planes_to_run(PASSING)
+print('full planes for alpha_min', PLANE_J)
 rec = {}
 for j in PLANE_J:
     rec[j] = [mp.moba_recon(scans, e, PLANE, S1.opts_j(j), PHANTOM_DIR, PROC_DIR,
