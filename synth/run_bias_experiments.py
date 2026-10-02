@@ -114,8 +114,10 @@ def run(cache, cond):
         print(f'  {cond} e{e}: {time.time() - t0:.0f} s', flush=True)
     S = 0.5 * (signed[0] + signed[1])
     T1, M0, R2 = pu.fit_t1_grid(S, TI, TR, truth['label'] >= 3)
-    np.savez(out, img0=imgs[0], img1=imgs[1], signed=S.astype(np.float32), T1_s=T1, M0=M0, R2=R2,
-             seconds=time.time() - t0, cond=cond)
+    tmp = out.with_name(out.stem + '.partial.npz')                     # atomic: a restart never
+    np.savez(tmp, img0=imgs[0], img1=imgs[1], signed=S.astype(np.float32), T1_s=T1, M0=M0, R2=R2,
+             seconds=time.time() - t0, cond=cond)                      # leaves a truncated result
+    os.replace(tmp, out)
     rows = pu.evaluate_t1(T1, truth)
     pu.print_eval(rows, f'\n{PLANE} {cond} ({time.time() - t0:.0f} s)')
     return out
