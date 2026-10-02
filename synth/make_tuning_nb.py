@@ -222,9 +222,43 @@ ax[1].plot(S1_LAMBDAS, [R1[l, 80]['rows'][0]['bias_vs_ideal_pct'] for l in S1_LA
 ax[1].set_xscale('log'); ax[1].axhline(0, color='k', lw=0.8); ax[1].set_xlabel('λ'); ax[1].set_ylabel('bias vs ideal (%)')
 ax[1].set_title('per-lesion bias vs λ (80 iterations)'); ax[1].grid(alpha=0.3); ax[1].legend(fontsize=7, ncol=2)
 plt.tight_layout(); plt.show()"""))
-C.append(md(r"""### Stage 1 reading
+C.append(md(r"""### Stage 1 reading (2026-10-02)
 
-_(added after the runs)_"""))
+**Convergence.** For λ ≥ 0.005 the reconstruction has converged by 40–80 iterations: the
+images change by ≤ 5 % between 40 and 150 iterations and every metric moves by < 1 ms or < 1
+percentage point. For λ ≤ 0.002 it does **not** converge: noise keeps growing with iterations
+(WM error 40 → 81 → 175 ms at λ = 0.0005 for 40 / 80 / 150 iterations; the checkerboard pattern
+in the profiles is noise amplified by the undersampling), so there the iteration count, not λ, is
+acting as the regulariser. That regime is fragile (the result depends on when FISTA is stopped)
+and is avoided.
+
+**Trade-off (80 iterations).**
+
+| λ | WM error (RMSE vs ideal) | GM error | mean \|lesion bias\| (4–10 mm) | short-T1 lesions 10 / 6 / 4 mm | long-T1 lesions 10 / 6 / 4 mm |
+|---|---|---|---|---|---|
+| 0.002 | 54 ms | 53 ms | 5.5 % | +2.0 / +8.7 / +10.0 % | −5.2 / +2.1 / −5.2 % |
+| 0.005 | 29 ms | 32 ms | 7.5 % | +3.5 / +10.9 / +10.8 % | −6.5 / −4.2 / −9.2 % |
+| 0.01 | 17 ms | 22 ms | 9.6 % | +5.5 / +13.2 / +12.3 % | −8.0 / −7.2 / −11.2 % |
+| 0.02 | 11 ms | 17 ms | 12.1 % | +8.7 / +16.6 / +14.5 % | −10.2 / −9.9 / −12.4 % |
+
+Each doubling of λ cuts the WM error by ~40 % and costs
+~2.5 points of lesion contrast. WM and GM mean T1 stay within 1 % of ideal at every setting.
+
+**The lesion bias does not go to zero at small λ.** It levels off at ~5 % (short-T1 lesions
++7 to +10 %) even where noise is huge. On noise-free data with the same true maps (task 1) the
+bias at small λ was ≈ 0, so this floor comes from **noise**, not from the regulariser: a
+nonlinear T1 fit of noisy voxels in a 2–32-voxel region is biased, and near the null the signed
+signal of the short-T1 lesions is small. Going below λ = 0.005 therefore buys little lesion
+contrast for a large increase in noise.
+
+**Recommendation (to be confirmed by eye on the grids).** λ in **0.005–0.01**, **80
+iterations**. 0.005 keeps more lesion contrast; 0.01 gives visibly cleaner maps (WM error 17 vs
+29 ms). The later 3-plane combination averages three acquisitions, which lowers noise further but
+does not remove a regulariser bias; that argues for the lower end, λ* = 0.005. Stage 3 (a weaker
+penalty on the T1-carrying coefficients) aims directly at this trade-off. Caveat for real data:
+the phantom's piecewise-smooth anatomy is sparser in wavelets than a real brain, so the same λ
+will smooth real cortex more; plan a short confirmation sweep (0.0025 / 0.005 / 0.01) on real
+data."""))
 
 nb = nbf.v4.new_notebook(); nb['cells'] = C
 nb['metadata']['kernelspec'] = {'name': 'python3', 'display_name': 'Python 3', 'language': 'python'}
