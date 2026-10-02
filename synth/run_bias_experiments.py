@@ -15,6 +15,7 @@ COND = <data>:<maps>:<method>:<reg>, e.g. nf:true:CAL:zero
                subspace-constrained SENSE (the basis still couples the TIs)
           zeroN  as zero with N iterations (convergence check)
           lamX   the method's own regulariser and iterations with lambda = X (dose-response)
+          lamXiN the method's own regulariser with lambda = X and N iterations (tuning sweeps)
 Each condition is reconstructed for both echo groups, map-set combined, echo-averaged and
 fitted exactly as in the V1 notebook / run_llr_reference.py, and cached as
 <cache_dir>/<PLANE>_<COND>.npz (img per echo, signed, T1_s, M0, R2, seconds). Existing
@@ -53,9 +54,14 @@ def zero_iters(reg):
 def recon_cmd(method, reg):
     if reg.startswith('zero'):
         return f'pics -S -l2 -r {ZERO_LAMBDA} -i {zero_iters(reg)} -U'
+    if reg == 'def':
+        return pu.LLR_CMD if method == 'LLR' else cal.cal_cmd()
+    lam, _, it = reg[3:].partition('i')
+    lam, it = float(lam), int(it) if it else None
     if method == 'LLR':
-        return pu.LLR_CMD if reg == 'def' else pu.LLR_CMD.replace(f':{pu.LLR_LAMBDA} ', f':{float(reg[3:])} ')
-    return cal.cal_cmd() if reg == 'def' else cal.cal_cmd(lam=float(reg[3:]))
+        cmd = pu.LLR_CMD.replace(f':{pu.LLR_LAMBDA} ', f':{lam} ')
+        return cmd if it is None else cmd.replace(f'-i {pu.LLR_ITER} ', f'-i {it} ')
+    return cal.cal_cmd(lam=lam) if it is None else cal.cal_cmd(lam=lam, it=it)
 
 
 def get_sens(cache, data, maps, e, scans_plane):
