@@ -175,22 +175,28 @@ def lesion_panel(vols, truth, spacing, title='', half=9):
     return fig
 
 
-def bias_bars(rows_by_method, title=''):
-    """Bias vs ideal (%) per region for each method (rows from pipeline_utils.evaluate_t1)."""
+def bias_bars(rows_by_method, title='', ylim=(-25, 25)):
+    """Bias vs ideal (%) per region for each method (rows from pipeline_utils.evaluate_t1). Bars beyond
+    `ylim` are capped at the axis limit and labelled with their true value (marked '▲'/'▼')."""
     names = [r['region'] for r in next(iter(rows_by_method.values())) if r['region'] != 'CSF']
     fig, ax = plt.subplots(figsize=(12, 3.8))
     n = len(rows_by_method); w = 0.8 / n
-    for j, ((k, rows), col) in enumerate(zip(rows_by_method.items(), SERIES)):
-        vals = [r['bias_vs_ideal_pct'] for r in rows if r['region'] != 'CSF']
+    lo, hi = ylim
+    for j, ((k, rows), col) in enumerate(zip(rows_by_method.items(), SERIES8)):
+        vals = np.array([r['bias_vs_ideal_pct'] for r in rows if r['region'] != 'CSF'])
+        shown = np.clip(vals, lo, hi)
         xs = np.arange(len(names)) - 0.4 + (j + 0.5) * w
-        ax.bar(xs, vals, w * 0.92, color=col, label=k)
-        for xx, vv in zip(xs, vals):
-            ax.text(xx, vv + (0.6 if vv >= 0 else -0.6), f'{vv:+.1f}', ha='center', va='bottom' if vv >= 0 else 'top',
-                    fontsize=6.5, color='#52514e')
+        ax.bar(xs, shown, w * 0.92, color=col, label=k)
+        for xx, vv, ss in zip(xs, vals, shown):
+            if vv != ss:                                      # off-scale: true value inside the capped bar
+                ax.text(xx, ss - np.sign(ss) * 0.8, ('▲' if vv > 0 else '▼') + f'{vv:+.0f}', ha='center',
+                        va='top' if ss > 0 else 'bottom', fontsize=7, color='#ffffff', rotation=90)
     ax.axhline(0, color='#52514e', lw=0.8)
+    ax.set_ylim(lo - 1, hi + 1)
     ax.set_xticks(range(len(names))); ax.set_xticklabels(names, rotation=25, ha='right', fontsize=8.5)
-    ax.set_ylabel('mean T1 bias vs ideal (%)'); ax.legend(fontsize=8.5, frameon=False); _style(ax)
-    ax.set_title(title, fontsize=10)
+    ax.set_ylabel('mean T1 bias vs ideal (%)'); ax.legend(fontsize=8.5, frameon=False, ncol=2); _style(ax)
+    ax.set_title(title + f'\n(axis clipped at {lo:+.0f} / {hi:+.0f} %; ▲▼ = off-scale bar, true value printed in it; '
+                         'exact values in the table)', fontsize=9.5)
     fig.tight_layout()
     return fig
 

@@ -17,6 +17,17 @@ Paths are repo-relative; the phantom directory comes from `QT1_PHANTOM_DIR` (def
   verbatim) plus the new sections; `report_v2.md` / `tuning_plan_v2.md` hold the report cell.
   Run from the repo root: `python moba_dev/build_nb_v2.py`.
 
+## Tuning stage 1 (2026-10-02/03, phantom v2)
+
+* `moba_plane.py` — the V2 full-plane, slice-wise `moba` reconstruction as a module (fixed
+  noise-referenced scaling, per-slice residual QC, cache keyed by options and phantom fingerprint).
+* `run_stage1.py` — computes and caches stage 1 (α_min screen, full planes, `-R 3` screen);
+  `build_nb_s1.py` builds `Recon_MOBA_Tuning_S1.ipynb` (decision cell from `report_s1.md`).
+* `figures.py` — comparison figures: T1 map galleries and sweep grids, orthogonal views, T1
+  histograms per tissue / setting, lesion panel, bias bars, per-slice convergence.
+* All caches are keyed by a **phantom fingerprint** (hash of `phantom_config.json`): results from
+  another phantom version are never reused, and an unfinished phantom (no config yet) is an error.
+
 ## V1 (2026-09-29, first build) — kept for the record
 
 `moba_core.py` (prototype of V1's moba call, 3D), `t2d.py` (V1 readout-slice test bed;

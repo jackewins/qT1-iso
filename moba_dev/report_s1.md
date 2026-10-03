@@ -8,7 +8,7 @@ above.
 | α_min | screen: flagged slice runs (of 26) | full plane: flagged slice runs (of 224) | worst residual / noise floor |
 |---|---|---|---|
 | 0.10 | 8 (x = 48, 56, 64, 96 in **both** echo groups) | – | 868 (screen) |
-| 0.15 | 1 (x = 56, echo 1) | **FLAGGED_015** | WORST_015 |
+| 0.15 | 1 (x = 56, echo 1) | **15** (10 distinct slices) | 5830 |
 | 0.20 | 0 | **0** | 1.10 |
 | 0.25 | 0 | – (screen only) | 1.08 (screen) |
 | 0.30 | 0 | **0** | 1.27 |
@@ -16,8 +16,9 @@ above.
 * The boundary lies **between 0.15 and 0.2** on phantom v2 (on v1 it was between 0.1 and 0.3,
   not resolved further). At 0.2 every one of the 224 slice runs converges.
 * **The screen under-calls instability**: at 0.15 it flagged 1 of 26 slice runs, the full plane
-  FLAGGED_015_SHORT. A 13-slice screen is a cheap first filter, not a stability proof; the
-  full-plane residual QC is the real test.
+  15 of 224 (6 in echo 0, 9 in echo 1; 10 distinct slices: x = 53-57, 59, 62, 94, 102, 103).
+  A 13-slice screen is a cheap first filter, not a stability proof; the full-plane residual QC is
+  the real test.
 * Divergence is **slice-specific, not random**: at 0.1 the same four slices fail in both echo
   groups (independent noise), and the 0.15 failures cluster in the same region
   (x = 54-64, 94, and two scalp-level slices). Anatomy/coil geometry decide where the
@@ -40,16 +41,29 @@ above.
 | WM robust SD (ms) | – | 32.4 | 40.9 (+26 %) |
 | GM robust SD (ms) | – | 34.6 | 42.9 |
 
-LOWER_015
+**0.15** converges in most slices but diverges in 10 (above). Without a fallback those slices ruin
+the means (WM +20.7 %, GM +550 % vs ideal) although the medians stay sensible (WM 272.1, GM 334.9 ms;
+robust SD 50.5 / 55.3 ms). With the fallback (next paragraph) its numbers are WM +1.3 %, GM −0.1 %,
+lesions +2.2 / −6.0 / +8.3 / +11.2 % (long T1, 10/6/4/2 mm) and +3.7 / +8.1 / +5.3 / +10.6 % (short):
+GM improves further, the lesions do not, and the noise rises again (WM robust SD 44.7 ms with the
+fallback, 50.5 ms as reconstructed, vs 40.9 at 0.2).
 
 Going from 0.3 to 0.2 removes most of the GM bias (−2.9 → −1.0 %) at ~26 % more noise; the
 lesion means hardly move (the 10 mm lesions are within 2 % of ideal at both; the 4 and 2 mm
 lesions now hold only 2 voxels each in v2's centred masks, so their ± 5 % differences are noise).
 Visually (section 7) the maps at 0.2 are slightly noisier, not sharper: α_min is a weak knob for
 image quality, because it is bounded below by stability. **Noise, not regularisation bias, is
-what limits these maps now** (WM voxel SD 12-16 % of T1; the 4 and 2 mm lesions are not visible).
+what limits these maps now** (WM robust voxel SD 12-15 % of T1; the 4 and 2 mm lesions are not visible).
 
-FALLBACK_R3
+**Adaptive fallback** (re-do flagged slices at 0.3, section 8): at 0.2 it never triggers (0 slices);
+at 0.15 it replaces 10 of 112 readout slices and turns a broken map into a usable one. It works as
+a safety net, but lowering α_min below 0.2 buys only GM accuracy (−1.0 → −0.1 %) at 10-25 % more
+noise and no lesion gain, so the agreed exception ("a lower α_min clearly reduces lesion bias")
+does not apply.
+
+**`-R 3`** (α decays 3× per Newton step instead of 2×, so more steps run at α_min) at 0.2:
+**2 of 26** screened slice runs diverge (0 with the default `-R 2`). Faster decay destabilises; keep
+`-R 2`.
 
 ### Decision (for the researcher)
 

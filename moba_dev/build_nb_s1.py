@@ -183,54 +183,77 @@ md(r"""
 T1 = 1/mean(R1*) over the two echo groups, NaN outside the head label (≥ 3), evaluated with
 `pu.evaluate_t1` (eroded tissue masks; each lesion: voxels holding ≥ half its peak partial-volume
 fraction). **Bias vs ideal** (the resolution-limited, fully sampled, noise-free reference) is the
-reconstruction's own error. Below the table: medians and robust SD (1.4826 × MAD) in WM and GM,
-and the histograms per α_min.
+reconstruction's own error. A setting with flagged slices is also shown "+ fallback" (flagged
+slices re-done at α_min 0.3, section 8). Below the table: medians and robust SD (1.4826 × MAD) in WM
+and GM, and the histograms per setting.
 """)
 code(r"""
-T1 = {j: 1000 * mp.t1_from([r['maps'] for r in rec[j]], head) for j in PLANE_J}          # ms
-rows = {j: pu.evaluate_t1(T1[j] / 1000, truth) for j in PLANE_J}
+def fallback(j):
+    # alpha_min j, with every readout slice the residual QC flags (worst of the two echo groups)
+    # replaced by the alpha_min 0.3 slice (section 8)
+    q = np.maximum(*(r['final_res'] / r['noise_floor'] for r in rec[j]))
+    bad = np.flatnonzero(q > S1.FLAG)
+    maps = [r['maps'].copy() for r in rec[j]]
+    for e in (0, 1):
+        maps[e][bad] = rec[0.3][e]['maps'][bad]
+    return 1000 * mp.t1_from(maps, head), bad
+
+
+T1, FB = {}, {}                                   # setting label -> T1 map (ms); alpha_min -> replaced slices
+for j in PLANE_J:
+    T1[f'α_min {j}'] = 1000 * mp.t1_from([r['maps'] for r in rec[j]], head)
+    if j != 0.3:
+        t, FB[j] = fallback(j)
+        if len(FB[j]):
+            T1[f'α_min {j} + fallback'] = t
+rows = {k: pu.evaluate_t1(v / 1000, truth) for k, v in T1.items()}
 llr_f = PHANTOM_DIR / f'llr_{PLANE}.npz'
 if llr_f.exists():
-    T1_llr = 1000 * np.load(llr_f)['T1_s']; rows['LLR'] = pu.evaluate_t1(T1_llr / 1000, truth)
+    rows['LLR'] = pu.evaluate_t1(np.load(llr_f)['T1_s'], truth)
+short = lambda k: k.replace('α_min ', 'α ').replace(' + fallback', '+fb')
 cols = list(rows)
 r0 = rows[cols[0]]
-print(f"{'region':18s} {'n':>5s} {'true':>6s} {'ideal':>6s}  " + ''.join(f"{('α ' + str(c)) if c != 'LLR' else 'LLR':>17s}" for c in cols))
+print(f"{'region':18s} {'n':>5s} {'true':>6s} {'ideal':>6s}  " + ''.join(f"{short(c):>17s}" for c in cols))
 for i, r in enumerate(r0):
     if r['region'] == 'CSF':
         continue
     print(f"{r['region']:18s} {r['n']:5d} {r['true_ms']:6.1f} {r['ideal_ms']:6.1f}  "
           + ''.join(f"{rows[c][i]['est_ms']:7.1f} ({rows[c][i]['bias_vs_ideal_pct']:+5.1f}%)" for c in cols))
-print('cells: mean T1 (ms) and bias vs ideal; CSF omitted (fails for every setting, see V2 report)')
+print('cells: mean T1 (ms) and bias vs ideal; CSF omitted (fails for every setting, see V2 report);'
+      ' +fb = flagged slices re-done at alpha_min 0.3')
 masks = F.tissue_masks(truth)
 for name in ('WM', 'GM'):
     m = masks[name]
     print(f'{name}: ideal median {np.median(truth["T1_ideal_ms"][m]):.1f} | ' + ' | '.join(
-        f"α {j}: median {np.nanmedian(T1[j][m]):.1f}, robust SD {1.4826 * np.nanmedian(np.abs(T1[j][m] - np.nanmedian(T1[j][m]))):.1f}"
-        for j in PLANE_J))
-F.bias_bars({f'α_min {j}': rows[j] for j in PLANE_J}, f'{PLANE}: mean T1 bias vs ideal per α_min (phantom v2)'); plt.show()
-F.hist_by_setting({f'α_min {j}': T1[j] for j in PLANE_J}, truth, f'{PLANE}: T1 histograms per α_min (eroded masks)'); plt.show()
+        f"{short(k)}: median {np.nanmedian(v[m]):.1f}, robust SD {1.4826 * np.nanmedian(np.abs(v[m] - np.nanmedian(v[m]))):.1f}"
+        for k, v in T1.items()))
+F.bias_bars(rows, f'{PLANE}: mean T1 bias vs ideal per setting (phantom v2)'); plt.show()
+F.hist_by_setting(T1, truth, f'{PLANE}: T1 histograms per setting (eroded masks)'); plt.show()
 """)
 
 md(r"""
 ## 7. Images for visual assessment
 
-Coronal in-plane slices (1.8 × 1.8 mm; rows = α_min, first row the ideal), at the mid slice and the
-slices through the lesion centres; shared window. Then the same as differences from the ideal,
+Coronal in-plane slices (1.8 × 1.8 mm; rows = settings, first row the ideal), at the mid slice and
+the slices through the lesion centres; shared window. "α_min 0.15" is shown as reconstructed
+(the diverged readout slices appear as broken horizontal lines) and "+ fallback" with those slices
+re-done at 0.3 (section 8). Then the same as differences from the ideal,
 a zoom on the lesion region, and the lesion panel (zoomed central slice of each lesion, per-voxel
 T1 inside each lesion mask).
 """)
 code(r"""
 LZ = sorted(set(z for _, _, z in F.lesion_slices(truth)))
 SL = [truth['label'].shape[2] // 2] + LZ
-vols = {f'α_min {j}': T1[j] for j in PLANE_J}
+vols = T1
 F.sweep_grid(vols, truth, SL, SP, f'{PLANE}: T1 per α_min (phantom v2)'); plt.show()
 F.sweep_grid(vols, truth, SL, SP, f'{PLANE}: T1 − ideal per α_min', diff=True); plt.show()
 xs_ = [x for x, _, _ in F.lesion_slices(truth)]
 crop = (slice(min(xs_) - 12, max(xs_) + 13), slice(8, truth['label'].shape[1] - 8))
 F.sweep_grid(vols, truth, LZ, SP, f'{PLANE}: zoom on the lesion band (x = {crop[0].start}-{crop[0].stop - 1})', crop=crop); plt.show()
-jl = min(PLANE_J)
-sel = {f'α_min {j}': T1[j] for j in sorted({jl, 0.3})}
-F.lesion_panel(sel, truth, SP, f'{PLANE}: lesions, lowest stable α_min vs 0.3'); plt.show()
+jst = min(j for j in PLANE_J if len(FB.get(j, [])) == 0)          # lowest alpha_min with no flagged slice
+keys = list(dict.fromkeys(['α_min 0.3', f'α_min {jst}'] + [k for k in T1 if k.endswith('fallback')]))[:3]
+sel = {k: T1[k] for k in keys}
+F.lesion_panel(sel, truth, SP, f'{PLANE}: lesions per setting'); plt.show()
 """)
 
 md(r"""
@@ -243,16 +266,12 @@ table shows, per lower α_min, how many slices would be replaced and the resulti
 value, screen only.
 """)
 code(r"""
-for j in [j for j in PLANE_J if j != 0.3]:
-    q = np.maximum(*(r['final_res'] / r['noise_floor'] for r in rec[j]))      # worst of the two echo groups
-    bad = np.flatnonzero(q > S1.FLAG)
-    maps = [r['maps'].copy() for r in rec[j]]
-    for e in (0, 1):
-        maps[e][bad] = rec[0.3][e]['maps'][bad]
-    T1_fb = 1000 * mp.t1_from(maps, head)
-    rr = pu.evaluate_t1(T1_fb / 1000, truth)
-    print(f'alpha_min {j}: {len(bad)} slices replaced {bad.tolist()}; bias vs ideal: '
-          + ', '.join(f"{r['region'].split(' (')[0]} {r['bias_vs_ideal_pct']:+.1f}%" for r in rr if r['region'] != 'CSF'))
+for j, bad in FB.items():
+    print(f'alpha_min {j}: {len(bad)} of {truth["label"].shape[0]} readout slices flagged and re-done at 0.3: {bad.tolist()}')
+    if len(bad):
+        rr = rows[f'α_min {j} + fallback']
+        print('   bias vs ideal with fallback: ' + ', '.join(f"{r['region'].split(' (')[0]} {r['bias_vs_ideal_pct']:+.1f}%"
+                                                      for r in rr if r['region'] != 'CSF'))
 if PASSING:
     jl = min(PASSING)
     r3 = S1.screen(jl, SCALING, extra=' -R 3', tag=f'j{jl} R3')
