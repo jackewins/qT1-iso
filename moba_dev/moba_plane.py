@@ -78,7 +78,7 @@ def moba_recon(scans_plane, e, plane, opts, phantom_dir, proc_dir, noise_ref_sca
     Returns (result dict, 'cached' | 'reconstructed')."""
     f = recon_file(proc_dir, plane, e, opts, phantom_dir, noise_ref_scale, phase_corr)
     if slices is not None:
-        f = f.with_name(f.stem + f'_x{min(slices)}-{max(slices)}.npz')
+        f = f.with_name(f.stem + '_xs' + hashlib.sha1(','.join(map(str, sorted(slices))).encode()).hexdigest()[:8] + '.npz')
     if f.exists():
         return dict(np.load(f)), 'cached'
     info = scans_plane[pu.REF_TI_IDX]['info']
@@ -114,6 +114,22 @@ def moba_recon(scans_plane, e, plane, opts, phantom_dir, proc_dir, noise_ref_sca
     res['rel_scale'] = np.where(res['scale_data'] > 0, 0.5 * res['scale_psf'] / np.maximum(res['scale_data'], 1e-12), 0)
     np.savez(f, **res)
     return res, 'reconstructed'
+
+
+def moba_recon_qc(scans_plane, e, plane, opts, fallback_opts, phantom_dir, proc_dir, flag=1.5, **kw):
+    """moba_recon with the residual-QC fallback (tuning stage 1): every readout slice whose raw
+    residual exceeds `flag` x its noise floor is reconstructed again with `fallback_opts` (only those
+    slices, cached separately) and replaced. Returns (result, state); result['fallback_slices'] lists
+    the replaced slices."""
+    r, state = moba_recon(scans_plane, e, plane, opts, phantom_dir, proc_dir, **kw)
+    r = dict(r)
+    bad = np.flatnonzero(r['final_res'] > flag * r['noise_floor'])
+    if len(bad):
+        rf, _ = moba_recon(scans_plane, e, plane, fallback_opts, phantom_dir, proc_dir, slices=bad, **kw)
+        for k in ('maps', 'sens', 'scale_data', 'scale_psf', 'steps', 'final_res', 'noise_floor', 'rel_scale'):
+            r[k] = np.array(r[k]); r[k][bad] = rf[k][bad]
+    r['fallback_slices'] = bad
+    return r, state
 
 
 def t1_from(maps_list, mask):
