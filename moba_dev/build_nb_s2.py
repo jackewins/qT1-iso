@@ -140,38 +140,60 @@ only noise. The median residual is a usable, truth-free ceiling for the regulari
 
 **Fallback policy (changed from stage 1).** Re-doing a flagged slice at α_min 0.3 is right for
 divergence but makes an over-regularised slice worse. Stage 2 therefore replaces every flagged slice
-by the **validated baseline** (α_min 0.2, l1val 1; converged in all 224 slice runs in stage 1),
-which has less regularisation than l1val ≥ 2 and more than l1val 0.5. (The runner also computed the
-α_min 0.3 re-runs; they are not used.)
+by the **nearest setting towards the validated baseline that passes the QC in that slice**
+(l1val 4 → 2 → 1, 2 → 1, 0.5 → 1; the baseline α_min 0.2, l1val 1 converged in all 224 slice runs
+in stage 1). This is the discrepancy principle applied per slice on the computed grid: each slice
+gets the strongest wavelet in the grid whose fit still explains the data to the noise level. (The
+runner also computed the α_min 0.3 re-runs; they are not used.)
 """)
 
 md(r"""
 ## 4. Full planes: per-slice convergence and the fallback
 
 All 112 readout slices × 2 echo groups for each l1val; flagged slices (raw residual > 1.5 × noise
-floor, per echo group) are replaced by the baseline's slices.
+floor, per echo group) are replaced as described above (section 5 also lists the numbers without the
+replacement).
 """)
 code(r"""
 raw = {v: [mp.moba_recon(scans, e, PLANE, S2.opts_l1(v), PHANTOM_DIR, PROC_DIR)[0] for e in (0, 1)] for v in L1_PLANES}
 
 
+def flagged(r):
+    return r['final_res'] > S2.FLAG * r['noise_floor']
+
+
 def with_fallback(v):
-    out, bad = [], []
+    '''Maps of setting v where each flagged slice is taken from the nearest grid setting towards
+    l1val 1 that passes the QC there. Returns (maps per echo group, source l1val per slice and echo).'''
+    steps = sorted((u for u in L1_PLANES if u != v and min(v, 1) <= u <= max(v, 1)), key=lambda u: abs(np.log(u / v)))
+    out, src = [], []
     for e in (0, 1):
-        r, b = raw[v][e], raw[1][e]
-        q = r['final_res'] / r['noise_floor']
-        f = np.flatnonzero(q > S2.FLAG)
-        m = r['maps'].copy(); m[f] = b['maps'][f]
-        out.append(m); bad.append(f)
-    return out, bad
+        m = raw[v][e]['maps'].copy(); s = np.full(m.shape[0], float(v)); bad = flagged(raw[v][e])
+        for u in steps:
+            ok = bad & ~flagged(raw[u][e])
+            m[ok] = raw[u][e]['maps'][ok]; s[ok] = u; bad &= ~ok
+        out.append(m); src.append(s)
+    return out, src
+
+
+def runs(xs):
+    '''[13, 15, 16, 17] -> "13, 15-17"'''
+    xs, out = list(xs), []
+    for x in xs:
+        if out and x == out[-1][1] + 1:
+            out[-1][1] = x
+        else:
+            out.append([x, x])
+    return ', '.join(f'{a}' if a == b else f'{a}-{b}' for a, b in out) or '-'
 
 
 FB = {v: with_fallback(v) for v in L1_PLANES}
 for v in L1_PLANES:
     for e in (0, 1):
-        q = raw[v][e]['final_res'] / raw[v][e]['noise_floor']
+        q = raw[v][e]['final_res'] / raw[v][e]['noise_floor']; src = FB[v][1][e]
+        repl = ', '.join(f'x = {runs(np.flatnonzero(src == u))} -> l1val {u:g}' for u in sorted(set(src) - {v}))
         print(f"l1val {v:>3g} echo {e}: {float(raw[v][e]['runtime_s']) / 60:5.1f} min, res/noise median {np.median(q):.2f}, "
-              f"max {q.max():.2f}; flagged -> baseline: {FB[v][1][e].tolist()}")
+              f"max {q.max():.2f}; flagged {int(flagged(raw[v][e]).sum()):3d}: {repl or 'none'}")
 F.slice_qc({f'l1val {v:g}': raw[v] for v in L1_PLANES}, f'{PLANE}: per-slice convergence, full planes (before fallback)'); plt.show()
 """)
 
@@ -195,6 +217,13 @@ for i, r in enumerate(rows[cols[0]]):
         continue
     print(f"{r['region']:18s} {r['n']:5d} {r['ideal_ms']:6.1f}  "
           + ''.join(f"{rows[c][i]['est_ms']:7.1f} ({rows[c][i]['bias_vs_ideal_pct']:+5.1f}%)" for c in cols))
+print('\nwithout the fallback (flagged slices as reconstructed), bias vs ideal:')
+for v in L1_PLANES:
+    if all((FB[v][1][e] == v).all() for e in (0, 1)):
+        continue
+    rr = pu.evaluate_t1(mp.t1_from([r['maps'] for r in raw[v]], head), truth)
+    print(f'   l1val {v:>3g}: ' + ', '.join(f"{r['region']} {r['bias_vs_ideal_pct']:+.1f}%" for r in rr
+                                          if r['region'] in ('WM', 'GM', 'lesion 1 (10 mm)', 'lesion 5 (10 mm)')))
 masks = F.tissue_masks(truth)
 print()
 for name in ('WM', 'GM'):
@@ -289,9 +318,14 @@ im = ax[1].imshow(np.where(np.sum(np.isfinite(E), 0) >= 15, Eyz, np.nan), cmap='
 ax[1].set_xlabel('pe2 slice z'); ax[1].set_ylabel('pe1 column y'); plt.colorbar(im, ax=ax[1], fraction=0.03, label='ms')
 ax[1].set_title('(f) l1val 1: WM error averaged along the readout, per (y, z)', fontsize=9)
 plt.show()
+ctr, oth = np.r_[21:24], np.r_[10:19, 26:34]
 for v in L1_PLANES:
     pz = per_z(T1[f'l1val {v:g}'])
-    print(f'l1val {v:>3g}: WM error at z=21-23 vs the other slices: {np.nanmean(pz[21:24]) - np.nanmedian(np.r_[pz[10:19], pz[26:34]]):+.1f} ms')
+    Te = [1000 / np.maximum(np.real(m[..., 2]), 1e-3) for m in FB[v][0]]
+    nz_ = [1.4826 * np.median(np.abs((Te[0] - Te[1])[:, :, z][wm[:, :, z]])) / 2 if wm[:, :, z].sum() > 200 else np.nan
+           for z in range(wm.shape[2])]
+    print(f'l1val {v:>3g}: WM error at z=21-23 vs the other slices: {np.nanmean(pz[ctr]) - np.nanmedian(pz[oth]):+5.1f} ms; '
+          f'WM noise at z=21-23 {np.nanmean(np.take(nz_, ctr)):.1f} ms vs {np.nanmedian(np.take(nz_, oth)):.1f} ms elsewhere')
 """)
 
 md(r"""
