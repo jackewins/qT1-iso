@@ -204,7 +204,9 @@ T1 = 1/mean(R1*) of the two echo groups (after the fallback), `pu.evaluate_t1` (
 lesion masks ≥ half the peak partial-volume fraction). **Bias vs ideal** is the reconstruction's own
 error; **robust SD** (1.4826 × MAD over the eroded mask, ms) measures the noise. The fraction of
 the voxel error that is noise is estimated from the two echo groups (independent noise, shared
-systematic error).
+systematic error). For the 10 and 6 mm lesions (the 4 and 2 mm lesions hold 2 voxels each) the
+lesion-WM **contrast** kept by the reconstruction and the voxel **CNR** (contrast / WM robust SD)
+show the trade-off in one number each.
 """)
 code(r"""
 T1 = {f'l1val {v:g}': 1000 * mp.t1_from(FB[v][0], head) for v in L1_PLANES}
@@ -226,6 +228,7 @@ for v in L1_PLANES:
                                           if r['region'] in ('WM', 'GM', 'lesion 1 (10 mm)', 'lesion 5 (10 mm)')))
 masks = F.tissue_masks(truth)
 print()
+rsd = {}
 for name in ('WM', 'GM'):
     m = masks[name]
     print(f'{name}: ideal median {np.median(truth["T1_ideal_ms"][m]):.1f}')
@@ -233,8 +236,17 @@ for name in ('WM', 'GM'):
         t = T1[f'l1val {v:g}'][m]
         te = [1000 / np.maximum(np.real(FB[v][0][e][..., 2]), 1e-3)[m] for e in (0, 1)]
         noise = 1.4826 * np.median(np.abs(te[0] - te[1])) / 2          # noise of the combined map
-        print(f"   l1val {v:>3g}: median {np.median(t):6.1f}, robust SD {1.4826 * np.median(np.abs(t - np.median(t))):5.1f} ms, "
-              f"of which noise ~{noise:5.1f} ms")
+        rsd[name, v] = 1.4826 * np.median(np.abs(t - np.median(t)))
+        print(f"   l1val {v:>3g}: median {np.median(t):6.1f}, robust SD {rsd[name, v]:5.1f} ms, of which noise ~{noise:5.1f} ms")
+print('\nlesion contrast vs WM: (lesion mean − WM mean) as % of the ideal contrast; voxel CNR = |contrast| / WM robust SD')
+reg = {r['region']: i for i, r in enumerate(rows[cols[0]])}
+LES = [k for k in reg if k.startswith('lesion') and ('10 mm' in k or '6 mm' in k)]
+print(f"{'l1val':>6s}  " + ''.join(f'{k:>24s}' for k in LES))
+for v in L1_PLANES:
+    rr = rows[f'l1val {v:g}']; w = rr[reg['WM']]
+    print(f'{v:6g}  ' + ''.join(
+        f"{100 * (rr[reg[k]]['est_ms'] - w['est_ms']) / (rr[reg[k]]['ideal_ms'] - w['ideal_ms']):10.0f} %, CNR {abs(rr[reg[k]]['est_ms'] - w['est_ms']) / rsd['WM', v]:4.2f}"
+        for k in LES))
 F.bias_bars(rows, f'{PLANE}: mean T1 bias vs ideal per l1val (α_min {S2.J}, after fallback)'); plt.show()
 F.hist_by_setting(T1, truth, f'{PLANE}: T1 histograms per l1val (eroded masks)'); plt.show()
 """)
