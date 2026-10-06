@@ -227,13 +227,15 @@ for v in L1_PLANES:
     print(f'   l1val {v:>3g}: ' + ', '.join(f"{r['region']} {r['bias_vs_ideal_pct']:+.1f}%" for r in rr
                                           if r['region'] in ('WM', 'GM', 'lesion 1 (10 mm)', 'lesion 5 (10 mm)')))
 masks = F.tissue_masks(truth)
+print('\nfailed voxels (R1* <= 0 or T1 > 1000 ms) in WM + GM after the fallback:',
+      ', '.join(f"l1val {v:g}: {int(np.sum(~(T1[f'l1val {v:g}'] <= 1000) & (masks['WM'] | masks['GM'])))}" for v in L1_PLANES))
 print()
 rsd = {}
 for name in ('WM', 'GM'):
     m = masks[name]
     print(f'{name}: ideal median {np.median(truth["T1_ideal_ms"][m]):.1f}')
     for v in L1_PLANES:
-        t = T1[f'l1val {v:g}'][m]
+        t = T1[f'l1val {v:g}'][m]; t = t[np.isfinite(t)]
         te = [1000 / np.maximum(np.real(FB[v][0][e][..., 2]), 1e-3)[m] for e in (0, 1)]
         noise = 1.4826 * np.median(np.abs(te[0] - te[1])) / 2          # noise of the combined map
         rsd[name, v] = 1.4826 * np.median(np.abs(t - np.median(t)))
@@ -345,23 +347,25 @@ md(r"""
 
 1. **Bright single voxels (speckle) are noise, not artefacts.** The voxel errors of the two echo
    groups are nearly uncorrelated, and voxels far off in one echo group are far off in the other
-   only at chance level. Most of them are too *long*: T1 = 1/R1*, so symmetric noise in R1* becomes
+   at close to chance level. Most of them are too *long*: T1 = 1/R1*, so symmetric noise in R1* becomes
    a long-T1 tail. They shrink with stronger regularisation (sections 5-6) and would average out
    further with more data (e.g. the 3-plane combination).
-2. **A dip in the central coronal slices (z = 21-23, WM 7-15 ms low)**, the same in every α_min and
-   l1val setting and on both phantom versions; LLR shows a smaller one (−3.6 ms). It has a
-   slice-wide part (−7 ms even > 30 mm from the ventricles) and a stronger local part near the
-   ventricles / deep GM. z = 22 is the centre of the pe2 axis, where the coarsest level of moba's
-   dyadic wavelet splits its 2× oversampled grid, and moba uses the same fixed sequence of random
-   wavelet shifts in every readout slice (`wavthresh_rand_state_set(prox, 1)` in
-   `src/moba/iter_l1.c`), so a grid-locked error repeats in all 112 slices. **Hypothesis, not yet
-   tested:** the proposed test shifts the object by two pe2 slices before reconstruction (a k-space
-   phase ramp) and checks whether the dip moves with the grid or with the anatomy.
-3. **Lines along the readout near the deep GM / ventricles** (panel f): regularisation smearing
-   across those structures, repeated in every readout slice because each readout slice is an
-   independent 2D problem with the same geometry.
-4. Horizontal streaks outside the brain (scalp level, background): each readout slice is
-   reconstructed independently; there is no regularisation along the readout. Not in brain tissue.
+2. **A dip in the central coronal slices (z = 21-23)**: WM 9-15 ms low at l1val ≤ 1 (in every
+   α_min of stage 1 and on both phantom versions; LLR shows a smaller one, −3.6 ms), much smaller at
+   l1val 2 and gone at l1val 4 (panel e and the numbers above). The noise is *not* higher in those
+   slices, so it is not an SNR effect; it is a systematic R1* offset that appears only with weak
+   regularisation. The earlier hypothesis (z = 22 is where the coarsest level of moba's dyadic
+   wavelet splits the 2× oversampled grid, and moba resets the random wavelet shifts to the same
+   sequence in every Newton step and readout slice, `wavthresh_rand_state_set(prox, 1)` in
+   `src/moba/iter_l1.c`) would predict a *larger* error with stronger thresholding, so it is less
+   likely now; the mechanism is open. A shift test (move the object by two pe2 slices with a
+   k-space phase ramp) would tell whether it is locked to the grid or to the anatomy.
+3. **Lines along the readout** (vertical in these coronal maps; panel f): errors that repeat at the
+   same (y, z) in consecutive readout slices. Each readout slice is an independent 2D problem with the
+   same geometry, sampling and wavelet shift sequence, so a position-locked error repeats along the
+   readout. They shrink with l1val.
+4. CSF is far too short in every setting (5000 ms is beyond the measured TI range), including the
+   CSF rim and the CSF at the top of the head (short bars at x = 13-14); outside the brain masks.
 """)
 
 REPORT = Path(__file__).with_name('report_s2.md')

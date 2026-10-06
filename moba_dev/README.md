@@ -28,6 +28,16 @@ Paths are repo-relative; the phantom directory comes from `QT1_PHANTOM_DIR` (def
 * All caches are keyed by a **phantom fingerprint** (hash of `phantom_config.json`): results from
   another phantom version are never reused, and an unfinished phantom (no config yet) is an error.
 
+## Tuning stage 2a (2026-10-06, phantom v2)
+
+* `run_stage2.py` — wavelet-strength sweep (`--l1val` 0.5/2/4/8 screens, full planes 0.5/1/2/4)
+  at α_min 0.2; computes and caches everything `Recon_MOBA_Tuning_S2.ipynb` shows. (Its α_min 0.3
+  fallback re-runs are computed but not used; see below.)
+* `build_nb_s2.py` builds `Recon_MOBA_Tuning_S2.ipynb` (decision cell from `report_s2.md`). The
+  notebook's fallback replaces each slice flagged by the residual QC with the nearest grid setting
+  towards l1val 1 that passes there (4 → 2 → 1, 0.5 → 1), because stronger wavelets fail by
+  under-fitting low-signal slices, which a higher α_min makes worse.
+
 ## V1 (2026-09-29, first build) — kept for the record
 
 `moba_core.py` (prototype of V1's moba call, 3D), `t2d.py` (V1 readout-slice test bed;
